@@ -9,7 +9,7 @@
 ------
 - [x] YOLOv3-darknet to tensorflow conversion (inference only)
 - [x] Inference script
-- [x] Input pipeline
+- [x] Training pipeline
 - [x] Speed evaluation
 - [ ] mAP evaluation
 - [ ] Training on VOC
