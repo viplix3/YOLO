@@ -1,0 +1,40 @@
+num_parallel_calls = 6 # number of parallel cpu threads to be used for fetching the data during training
+input_shape = 608 # input shape of the model
+max_boxes = 20 # max number of boxes to be kept of a class during non max suppression
+# for data augmentation
+jitter = 0.3 
+hue = 0.1
+sat = 1.0
+cont = 0.8
+bri = 0.1
+
+# decay parameters
+norm_decay = 0.99
+weight_decay = 5e-4
+norm_epsilon = 1e-4 # for avoiding division by zero error during batch normalization
+pre_train = True # weather to use pre-trained darknet 53 feature extractor during training
+feature_extractor_conv_count = 52 # number of convolutional layers in the feature extractor
+num_anchors = 9 # number of anchors
+num_classes = 80 # number of classes in the dataset
+training = True # training flag
+ignore_thresh = .5 # threshold to consider a box as true positive, during calculating loss
+learning_rate = 1e-3 # learning rate for training the model
+train_batch_size = 32 # batch size to be used during training
+val_batch_size = 32 # batch size to be used during validation
+train_num = 40000 # number of images to be used for training
+val_num = 5000 # number of images to be used for validation
+Epoch = 50 # number of epochs for training
+score_threshold = 0.3 # score threshold for prediction
+nms_threshold = 0.3 # nms threshold for prediction
+gpu_num = "0" # gpu bus id to be used for all the processes
+logs_dir = './logs/' # path for saving the training/validation logs
+data_dir = './dataset/' # base path in which the dataset has been kept
+model_dir = './converted/' # path for saving the model
+yolov3_cfg_path = './darknet_data/yolov3.cfg' # cfg file for the model
+yolov3_weights_path = './darknet_data/yolov3.weights' # path of weights file for the model if the pre-trained model is to be used for training
+darknet53_weights_path = './darknet_data/darknet53.weights' # path of weights file for the darknet feature extractor
+anchors_path = './model_data/yolo_anchors_pre-trained.txt' # path to the anchors file
+classes_path = './model_data/coco_classes.txt' # path for the text file containing the classes of the dataset
+train_annotations_file = './train.txt' # path for the text file containing the training image annotations
+val_annotations_file = './val.txt' # path for text file containing the validation image annotations
+output_dir = './tfrecords/' # path for saving the tfrecords
