@@ -1,0 +1,7 @@
+__pycache__
+utils/__pycache__
+darknet_data/yolov3.weights
+darknet_data/darknet53.weights
+dataset/
+converted/
+logs/ 

@@ -13,14 +13,15 @@
 - [ ] mAP evaluation
 - [ ] Training on VOC
 
-**Suggestions and pull requests are most welcome**
+Suggestions and pull requests are most welcome
 
-### Running YOLOv3-608 model on a 1080Ti I am getting around 19FPS
-### Running YOLOv3-608 model on a 1050Ti I am getting around 6FPS
 
 ## Some Results
 ------
-![alt-text](/results/images/RWovpT.jpeg)("YOLO-tensorflow results")
+![alt-text](/results/images/RWovpT.jpeg "YOLO-tensorflow results")
+
+**Running YOLOv3-608 model on a 1080Ti I am getting around 19FPS**
+**Running YOLOv3-608 model on a 1050Ti I am getting around 6FPS**
 
 ## How to run the model you ask?
 ------
@@ -34,8 +35,7 @@ Run the following commands
 ```shell
 virtualenv env -p python3
 source env\bin\activate
-```
-```python
+
 pip install -r requirements.txt
 python inference.py path_to_the_image_directory path_for_saving_the_results --darknet_model 1`
 ```
@@ -90,7 +90,7 @@ If you are doing this step, update the variable anchors_path in your config.py f
 
 Run the following command
 
-```python
+```shell
 python k-means.py
 ```
 
@@ -98,7 +98,7 @@ python k-means.py
 
 Running the following command will do some darkmagic as done in darknet (pun intended) and will start training the model.
 
-```python
+```shell
 python train.py
 ```
 You might get an error while training for the first time, I am still working to resolve it. (Suggestions are welcome, I am still a noob.)
@@ -107,6 +107,6 @@ Run the command again and you are good to go.
 
 ### 6. Making detections using the trained weights
 
-```python
+```shell
 python inference.py path_to_the_image_directory path_for_saving_the_results`
 ```
