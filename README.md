@@ -3,6 +3,7 @@
 
 ### This is an implementation of YOLOv3 in tensorflow. Although this can work for other variants of YOLO as well with minute changes.
 ### [YAD2K](https://github.com/allanzelener/YAD2K) and [darknet](https://github.com/pjreddie/darknet) has been a great help.
+### And obviously [Markdown Cheatsheet](https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet) for this beautiful README
 
 ## TODO
 ------
@@ -20,8 +21,9 @@ Suggestions and pull requests are most welcome
 ------
 ![alt-text](/results/images/RWovpT.jpeg "YOLO-tensorflow results")
 
-**Running YOLOv3-608 model on a 1080Ti I am getting around 19FPS**
-**Running YOLOv3-608 model on a 1050Ti I am getting around 6FPS**
+**When running YOLOv3-608 model on a 1080Ti I am getting around 19FPS**
+
+**When running YOLOv3-608 model on a 1050Ti I am getting around 6FPS**
 
 ## How to run the model you ask?
 ------
