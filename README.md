@@ -24,7 +24,7 @@ Suggestions and pull requests are most welcome
 ------
 [![alt-text](/layers/etc/test_image_1.jpg)](https://www.youtube.com/watch?v=rrBdDHYzEzc)
 
-![alt-text](/layers/etc/RWovpT.jpeg "YOLO-tensorflow results")
+[//]: <![alt-text](/layers/etc/RWovpT.jpeg "YOLO-tensorflow results")>
 
 **When running YOLOv3-608 model on a 1080Ti I am getting around 19FPS**
 
