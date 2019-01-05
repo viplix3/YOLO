@@ -5,3 +5,6 @@ darknet_data/darknet53.weights
 dataset/
 converted/
 logs/ 
+env/
+test_images/
+results/

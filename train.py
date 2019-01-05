@@ -68,12 +68,12 @@ def train(ckpt_path, log_path, class_path, decay_steps=2000, decay_rate=0.8):
 		with tf.name_scope('data_parser/'):
 			train_reader = Parser('train', config.data_dir, config.anchors_path, config.output_dir, 
 				config.num_classes, input_shape=config.input_shape, max_boxes=config.max_boxes)
-			train_data = train_reader.build_dataset(config.train_batch_size)
+			train_data = train_reader.build_dataset(config.train_batch_size//config.subdivisions)
 			train_iterator = train_data.make_one_shot_iterator()
 
 			val_reader = Parser('val', config.data_dir, config.anchors_path, config.output_dir, 
 				config.num_classes, input_shape=config.input_shape, max_boxes=config.max_boxes)
-			val_data = val_reader.build_dataset(config.train_batch_size)
+			val_data = val_reader.build_dataset(config.val_batch_size//config.subdivisions)
 			val_iterator = val_data.make_one_shot_iterator()
 
 
@@ -133,14 +133,21 @@ def train(ckpt_path, log_path, class_path, decay_steps=2000, decay_rate=0.8):
 
 		# Define optimizer for minimizing the computed loss
 		with tf.name_scope('Optimizer'):
+			#optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=config.momentum)
 			optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
 			update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 			with tf.control_dependencies(update_ops):
 				if config.pre_train:
 					train_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='yolo')
-					train_op = optimizer.minimize(loss=loss, global_step=global_step, var_list=train_vars)
+					grads = optimizer.compute_gradients(loss=loss, var_list=train_vars)
+					gradients = [(tf.placeholder(dtype=tf.float32, shape=grad[1].get_shape()), grad[1]) for grad in grads]
+					gradients = gradients * config.subdivisions
+					train_step = optimizer.apply_gradients(grads_and_vars=gradients, global_step=global_step)
 				else:
-					train_op = optimizer.minimize(loss=loss, global_step=global_step)
+					grads = optimizer.compute_gradients(loss=loss)
+					gradients = [(tf.placeholder(dtype=tf.float32, shape=grad[1].get_shape()), grad[1]) for grad in grads]
+					gradients = gradients * config.subdivisions
+					train_step = optimizer.apply_gradients(grads_and_vars=gradients, global_step=global_step)
 
 
 
@@ -167,11 +174,11 @@ def train(ckpt_path, log_path, class_path, decay_steps=2000, decay_rate=0.8):
 			print('Restoring model ', checkmate.get_best_checkpoint(ckpt_path))
 			tf.train.Saver().restore(sess, checkmate.get_best_checkpoint(ckpt_path))
 			print('Model Loaded!')
-		else:
-			sess.run(init_op)
-		if config.pre_train is True:
+		elif config.pre_train is True:
 			load_ops = load_weights(tf.global_variables(scope='darknet53'), config.darknet53_weights_path)
 			sess.run(load_ops)
+		else:
+			sess.run(init_op)
 
 		print('Uninitialized variables: ', sess.run(tf.report_uninitialized_variables()))
 
@@ -184,10 +191,18 @@ def train(ckpt_path, log_path, class_path, decay_steps=2000, decay_rate=0.8):
 
 			trainbar = tqdm(range(config.train_num//config.train_batch_size))
 			for k in trainbar:
+				total_grad = []
+				for minibach in range(config.subdivisions):
+					train_summary, loss_train, grads_and_vars = sess.run([summary_op, loss,
+						grads], feed_dict={is_training: True, mode: 1})
+					total_grad += grads_and_vars
 
-				train_summary, loss_train, _ = sess.run([summary_op, loss,
-					train_op], feed_dict={is_training: True, mode: 1})
+				feed_dict = {is_training: True, mode: 1}
+				for i in range(len(gradients)):
+					feed_dict[gradients[i][0]] = total_grad[i][0]
+				# print(np.shape(feed_dict))
 
+				_ = sess.run(train_step, feed_dict=feed_dict)
 				train_summary_writer.add_summary(train_summary, epoch)
 				train_summary_writer.flush()
 				mean_loss_train.append(loss_train)
@@ -209,13 +224,13 @@ def train(ckpt_path, log_path, class_path, decay_steps=2000, decay_rate=0.8):
 			mean_loss_train = np.mean(mean_loss_train)
 			mean_loss_valid = np.mean(mean_loss_valid)
 
-
-			print('\nTrain loss after %d epochs is: %f' %(epoch+1, mean_loss_train))
-			print('\nValidation loss after %d epochs is: %f' %(epoch+1, mean_loss_valid))
+			print('\n')
+			print('Train loss after %d epochs is: %f' %(epoch+1, mean_loss_train))
+			print('Validation loss after %d epochs is: %f' %(epoch+1, mean_loss_valid))
 			print('\n\n')
 
 			if ((epoch+1)%3) == 0:
-				best_ckpt_saver.handle(mean_loss_valid, sess, epoch)
+				best_ckpt_saver.handle(mean_loss_valid, sess, tf.constant(epoch))
 
 		print('Tuning Completed!!')
 		train_summary_writer.close()

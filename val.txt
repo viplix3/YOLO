@@ -1,0 +1,40 @@
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-34.jpg 1,2,227,194,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-75.jpg 1,1,640,459,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-139.jpg 20,6,177,167,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-17.jpg 95,60,167,118,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-13.jpg 55,28,393,313,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-98.jpg 108,31,351,308,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-200.jpg 107,10,249,166,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-48.jpg 43,28,240,176,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-172.jpg 183,53,399,302,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-8.jpg 16,11,236,175,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-197.jpg 114,35,987,653,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-167.jpg 1,5,175,195,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-175.jpg 69,89,354,378,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-142.jpg 171,162,811,740,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-134.jpg 125,87,194,169,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-132.jpg 6,2,240,131,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-49.jpg 162,36,611,395,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-148.jpg 32,177,174,316,0 309,172,428,315,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-153.jpg 10,1,612,700,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-184.jpg 81,77,567,617,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-185.jpg 25,1,200,181,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-192.jpg 127,160,298,289,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-35.jpg 1,1,164,183,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-72.jpg 219,195,446,375,0 98,34,284,336,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-38.jpg 7,17,257,180,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-143.jpg 17,29,238,162,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-25.jpg 31,82,325,641,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-22.jpg 252,76,466,335,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-123.jpg 280,42,550,392,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-61.jpg 94,63,195,148,0 142,39,213,108,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-171.jpg 108,21,180,115,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-14.jpg 163,81,546,438,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-159.jpg 14,11,223,221,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-104.jpg 189,41,340,249,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-68.jpg 1,24,517,423,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-174.jpg 125,43,588,527,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-84.jpg 31,6,197,163,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-173.jpg 202,21,515,387,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-51.jpg 315,105,772,540,0
+/home/viplix3/Documents/Git/YOLO/dataset/raccoon/images/raccoon-26.jpg 114,5,306,337,0

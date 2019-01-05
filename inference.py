@@ -284,8 +284,8 @@ def run_inference(img_path, output_dir,  args):
 
 	 	######################## Visualization ######################
 		font = ImageFont.truetype(font='./font/FiraMono-Medium.otf', 
-			size=np.floor(3e-2 * image.shape[1] + 0.5).astype(np.int32))
-		thickness = (image.shape[0] + image.shape[1]) // 500  # do day cua BB
+			size=np.floor(1e-2 * image.shape[1] + 0.5).astype(np.int32))
+		thickness = (image.shape[0] + image.shape[1]) // 1000  # do day cua BB
 
 		image = Image.fromarray((image).astype('uint8'), mode='RGB')
 		output_labels = open(os.path.join(output_dir_labels, file_names[x].split(',')[0]+'.txt'), 'w')

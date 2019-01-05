@@ -450,35 +450,7 @@ class Parser:
 
 		print('Preparing data....')
 		self.process_tfrecord(self.mode, file_path, bounding_boxes, classes)
-
-
-		# val_split = int(0.05*num_images)
-		# train_split = num_images-val_split
-		# print('Splitting data with %d training images, %d validation images' 
-		# 	% (train_split, val_split))
-
-
-		# train_filenames = file_path[:train_split]
-		# train_bb = bounding_boxes[:train_split]
-		# train_classes = classes[:train_split]
-
-		# train_filenames = file_path
-		# train_bb = bounding_boxes
-		# train_classes = classes
-
-
-		# val_filenames = file_path[train_split: ]
-		# val_bb = bounding_boxes[train_split: ]
-		# val_classes = classes[train_split: ]
-
-		# if self.mode == 'train':
-		# 	print('Preparing training data....')
-		# 	self.process_tfrecord(self.mode, train_filenames, train_bb, train_classes)
 		
-		# else:
-		# 	print('Preparing validation data....')
-		# 	self.process_tfrecord(self.mode, val_filenames, val_bb, val_classes)
-
 
 	def parser(self, serialized_example):
 		""" Parsed the bianary serialized example

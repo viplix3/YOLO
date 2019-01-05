@@ -11,6 +11,9 @@
 - [x] Inference script
 - [x] Training pipeline
 - [x] Speed evaluation
+- [X] Training on raccoon dataset
+- [x] Subdivisions implentation - aids in training big batches with small GPU vRAM
+- [ ] SGD with burn-in
 - [ ] mAP evaluation
 - [ ] Training on VOC
 
@@ -19,11 +22,21 @@ Suggestions and pull requests are most welcome
 
 ## Some Results
 ------
-![alt-text](/results/images/RWovpT.jpeg "YOLO-tensorflow results")
+[![alt-text](/layers/etc/test_image_1.jpg)](https://www.youtube.com/watch?v=rrBdDHYzEzc)
+
+![alt-text](/layers/etc/RWovpT.jpeg "YOLO-tensorflow results")
 
 **When running YOLOv3-608 model on a 1080Ti I am getting around 19FPS**
 
 **When running YOLOv3-608 model on a 1050Ti I am getting around 6FPS**
+
+
+
+## Even the tensorboard is beautiful
+------
+![alt-text](/layers/etc/Tensorboard-loss.png "Tensorboard-Loss")
+![alt-text](/layers/etc/Tensorboard-train_data.png "Tensorboard-training_data")
+
 
 ## How to run the model you ask?
 ------
