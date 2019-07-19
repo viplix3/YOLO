@@ -27,20 +27,17 @@ FLAGS = tf.app.flags.FLAGS
 
 class Parser:
 
-	def __init__(self, mode, dataset_dir, anchors_path, output_dir, num_classes, 
+	def __init__(self, mode, anchors_path, output_dir, num_classes, 
 		input_shape, max_boxes):
 		""" Initializes the object of the parser class.
 			Input:
 				mode: string, sets the mode to 'train' or 'val'
-				dataset_dir: string, path for the directory where the dataset has been stored
 				anchors_path: string, path for the anchors
 				output_dir: string, path for the directory where the tfrecords will be saved
 				num_classes: int, number of classes in the dataset
 				input_shape: int, shape of the input to the model
 				max_boxes: int, maximum number of boxes to be predicted for each class
 		"""
-
-		self.data_dir = dataset_dir
 		self.input_shape = input_shape
 		self.max_boxes = max_boxes
 		self.mode = mode
@@ -58,6 +55,7 @@ class Parser:
 		self.class_names = self.get_classes(config.classes_path)
 		if len(self.TfrecordFile) == 0:
 			self.make_tfrecord()
+			self.TfrecordFile = tf.gfile.Glob(file_pattern)
 
 
 	def _int64_feature(self, value):
@@ -139,7 +137,6 @@ class Parser:
 		with open(file_path) as file:
 			for lines in file.read().splitlines():
 				line = lines.split()
-				# name = os.path.join('./dataset/', line[0])
 				name = line[0]
 				file_name.append(name)
 				line = line[1::]
@@ -206,7 +203,7 @@ class Parser:
 
 				image_data = self._process_image(_filename)
 
-				example = self.convert_to_example(image_data, _bb, _classes)
+				example = self.convert_to_example(_filename, image_data, _bb, _classes)
 				
 				writer.write(example.SerializeToString())
 				shard_count += 1
@@ -229,7 +226,7 @@ class Parser:
 			Output:
 				img_data: array, containing the image data
 		"""
-		with tf.gfile.FastGFile(filename, 'rb') as file:
+		with tf.gfile.GFile(filename, 'rb') as file:
 			image_data = file.read()
 
 		return image_data
@@ -254,50 +251,25 @@ class Parser:
 		num_anchors = np.shape(self.anchors)[0]
 
 		# Using default YOLOv3 settings
-		num_layers = num_anchors//3 # Number of output layers
+		num_layers = num_anchors//config.num_anchors_per_scale # Number of output layers
+
 		anchor_mask = [[6, 7, 8], [3, 4, 5], [0, 1, 2]] if num_layers == 3 else [
 			[3, 4, 5], [0, 1, 2]] # Which anchor is to be associated to which output layer
 
-		# print('Bounding boxes, x1, y1, x2, y2:\n{}'.format(bb))
-		# print("Number of bounding boxes: {}".format(bb.shape[0]))
 		true_boxes = np.array(bb, dtype='float32')
 		input_shape = np.array((self.input_shape, self.input_shape), dtype='int32')
 		boxes_xy = (true_boxes[..., 0:2] + true_boxes[..., 2:4]) // 2
 		boxes_wh = true_boxes[..., 2:4] - true_boxes[..., 0:2]
 
-		# print(true_boxes)
-		# exit()
-
-
-		# true_boxes[..., 0:2] = boxes_xy
-		# true_boxes[..., 2:4] = boxes_wh
-		# print('Un-normalized true_boxes, x, y, w, h:\n{}'.format(true_boxes))
-		
-		# Normalizing the BB
-		true_boxes[..., 0:2] = boxes_xy / input_shape[::-1]
-		true_boxes[..., 2:4] = boxes_wh / input_shape[::-1]
-
-		# print('Normalized true_boxes, x, y, w, h:\n{}'.format(true_boxes))
-
-		# if (true_boxes>=1).any():
-		# 	true_boxes[true_boxes>=1] = 0.999
-		# 	# print(true_boxes)
-		# 	# exit()
-
-		# if len(true_boxes.shape) == 1:
-		# 	true_boxes = np.reshape(true_boxes, (1, true_boxes.shape[0]))
+		true_boxes[..., 0:2] = boxes_xy
+		true_boxes[..., 2:4] = boxes_wh
 
 		num_boxes = true_boxes.shape[0]
 
 		grid_shapes = [input_shape//{0:32, 1:16, 2:8}[l] for l in range(num_layers)]
-		# print('Grid shapes for the input {}: {}'.format(input_shape, grid_shapes))
 
 		y_true = [np.zeros((grid_shapes[l][0], grid_shapes[l][1], len(anchor_mask[l]),
 			5+self.num_classes), dtype='float32') for l in range(num_layers)]
-
-		# print('Shape of y_true: {}'.format(np.shape(y_true)))
-		# print('Shape of y_true[0]: {}\nShape of y_true[1]: {}\nShape of y_true[2]: {}'.format(
-		# 	np.shape(y_true[0]), np.shape(y_true[1]), np.shape(y_true[2])))
 
 		anchors = np.expand_dims(self.anchors, 0)
 		anchor_maxes = anchors / 2.
@@ -323,31 +295,30 @@ class Parser:
 
 		# Find best anchor for each true box
 		best_anchor = np.argmax(iou, axis=-1)
-		# print('Shape of true_boxes: {}\nShape of best_anchors: {}'.format(
-		# 	true_boxes.shape, best_anchor.shape))
 
-		# print('Best anchors:\n{}'.format(best_anchor))
-
-
-		# print(true_boxes)
-		# exit()
 		for t, n, in enumerate(best_anchor):
 			for l in range(num_layers):
 				if n in anchor_mask[l]:
-					i = np.floor(true_boxes[t, 0]*grid_shapes[l][1]).astype('int32')
-					j = np.floor(true_boxes[t, 1]*grid_shapes[l][0]).astype('int32')
+					i = np.floor(true_boxes[t, 0] / self.input_shape * grid_shapes[l][1]).astype('int32')
+					j = np.floor(true_boxes[t, 1] / self.input_shape * grid_shapes[l][0]).astype('int32')
 					k = anchor_mask[l].index(n)
-					# print(i, j, n, anchor_mask[l], k)
 					c = true_boxes[t, 4].astype('int32')
 					y_true[l][j, i, k, 0:4] = true_boxes[t, 0:4]
-					y_true[l][j, i, k, 4] = 1.
+					y_true[l][j, i, k, 4:5] = 1.
 					y_true[l][j, i, k, 5+c] = 1.
+
+					# label smoothning
+					# one_shot_label = y_true[l][j, i, k, 5:]
+					# uniform_class_distribution = np.full(self.num_classes, 1.0/self.num_classes)
+					# epsilon = 0.01
+					# smooth_label = (one_shot_label * (1 - epsilon)) + (epsilon * uniform_class_distribution)
+					# y_true[l][j, i, k, 5:] = smooth_label
 
 		return y_true[0], y_true[1], y_true[2]
 
 
 
-	def convert_to_example(self, image_data, bb, classes):
+	def convert_to_example(self, file_name, image_data, bb, classes):
 		""" Converts the values to Tensorflow TFRecord example for saving in the TFRecord file 
 			Input:
 				image_data: array, containing the image data read from the disk
@@ -358,13 +329,12 @@ class Parser:
 		"""
 		bb = bb.T
 		classes = classes.T
-		# print(bb, classes)
-		# exit()
 		xmin = bb[0]
 		ymin = bb[1]
 		xmax = bb[2]
 		ymax = bb[3]
 		example = tf.train.Example(features=tf.train.Features(feature={
+			'image/file_name': self._bytes_feature(tf.compat.as_bytes(file_name)),
 			'image/encoded': self._bytes_feature(image_data),
 			'image/object/bbox/xmin': self._float_feature(xmin),
 			'image/object/bbox/xmax': self._float_feature(xmax),
@@ -380,8 +350,7 @@ class Parser:
 		""" Makes required threds and calls further functions to execute the process of 
 			making tfrecords in a multithreaded environment 
 			Input:
-				mode: string, specify if the tfrecords are to be made for training, validation 
-					or testing
+				mode: string, specify if the tfrecords are to be made for training or validation
 				file_names: array, containing the relative filepaths of images
 				bb: array, containing bounding boxes of all the objects in an image
 				classes: array, containing classes associated to every bounding box
@@ -459,31 +428,35 @@ class Parser:
 			Output:
 				image: tf tensor, conatines the image data
 				bbox: list, containing the bounding boxes for the image
-				bbox_true_13, bbox_true_26, bbox_true_52: tf tensor, containes the processed bounding boxes
+				bbox_true_19, bbox_true_38, bbox_true_76: tf tensor, containes the processed bounding boxes
 		"""
 		features = tf.parse_single_example(
 			serialized_example,
 			features = {
-				'image/encoded' : tf.FixedLenFeature([], dtype = tf.string),
-				'image/object/bbox/xmin' : tf.VarLenFeature(dtype = tf.float32),
-				'image/object/bbox/xmax': tf.VarLenFeature(dtype = tf.float32),
-				'image/object/bbox/ymin': tf.VarLenFeature(dtype = tf.float32),
-				'image/object/bbox/ymax': tf.VarLenFeature(dtype = tf.float32),
-				'image/object/bbox/label': tf.VarLenFeature(dtype = tf.float32)
+				'image/file_name': tf.VarLenFeature(dtype=tf.string),
+				'image/encoded' : tf.FixedLenFeature([], dtype=tf.string),
+				'image/object/bbox/xmin' : tf.VarLenFeature(dtype=tf.float32),
+				'image/object/bbox/xmax': tf.VarLenFeature(dtype=tf.float32),
+				'image/object/bbox/ymin': tf.VarLenFeature(dtype=tf.float32),
+				'image/object/bbox/ymax': tf.VarLenFeature(dtype=tf.float32),
+				'image/object/bbox/label': tf.VarLenFeature(dtype=tf.float32)
 			}
 		)
+		file_name = features['image/file_name'].values
+		# file_name = tf.Print(file_name, [file_name], message="file_name: ")
 		image = tf.image.decode_jpeg(features['image/encoded'], channels = 3)
 		image = tf.image.convert_image_dtype(image, tf.uint8)
-		xmin = tf.expand_dims(features['image/object/bbox/xmin'].values, axis = 0)
-		ymin = tf.expand_dims(features['image/object/bbox/ymin'].values, axis = 0)
-		xmax = tf.expand_dims(features['image/object/bbox/xmax'].values, axis = 0)
-		ymax = tf.expand_dims(features['image/object/bbox/ymax'].values, axis = 0)
-		label = tf.expand_dims(features['image/object/bbox/label'].values, axis = 0)
-		bbox = tf.concat(axis = 0, values = [xmin, ymin, xmax, ymax, label])
+		xmin = tf.expand_dims(features['image/object/bbox/xmin'].values, axis=0)
+		ymin = tf.expand_dims(features['image/object/bbox/ymin'].values, axis=0)
+		xmax = tf.expand_dims(features['image/object/bbox/xmax'].values, axis=0)
+		ymax = tf.expand_dims(features['image/object/bbox/ymax'].values, axis=0)
+		label = tf.expand_dims(features['image/object/bbox/label'].values, axis=0)
+		bbox = tf.concat(axis=0, values=[xmin, ymin, xmax, ymax, label])
 		bbox = tf.transpose(bbox, [1, 0])
 		image, bbox = self.Preprocess(image, bbox)
-		bbox_true_13, bbox_true_26, bbox_true_52 = tf.py_func(self.preprocess_true_boxes, [bbox], [tf.float32, tf.float32, tf.float32])
-		return image, bbox, bbox_true_13, bbox_true_26, bbox_true_52
+		
+		bbox_true_19, bbox_true_38, bbox_true_76 = tf.py_func(self.preprocess_true_boxes, [bbox], [tf.float32, tf.float32, tf.float32])
+		return image, bbox, bbox_true_19, bbox_true_38, bbox_true_76
 
 
 	def Preprocess(self, image, bbox):
@@ -509,7 +482,7 @@ class Parser:
 		dy = (input_high - new_high) / 2
 
 		# Resizing the image
-		image = tf.image.resize_images(image, [tf.cast(new_high, tf.int32), tf.cast(new_width, tf.int32)], method = tf.image.ResizeMethod.BICUBIC)
+		image = tf.image.resize_images(image, [tf.cast(new_high, tf.int32), tf.cast(new_width, tf.int32)], method=tf.image.ResizeMethod.BICUBIC)
 		# Padding done
 		new_image = tf.image.pad_to_bounding_box(image, tf.cast(dy, tf.int32), tf.cast(dx, tf.int32), tf.cast(input_high, tf.int32), tf.cast(input_width, tf.int32))
 		
@@ -521,7 +494,7 @@ class Parser:
 		image_color_padded = (1 - image_ones_padded) * 128
 		image = image_color_padded + new_image
 
-		xmin, ymin, xmax, ymax, label = tf.split(value = bbox, num_or_size_splits=5, axis = 1)
+		xmin, ymin, xmax, ymax, label = tf.split(value=bbox, num_or_size_splits=5, axis=1)
 		xmin = xmin * new_width / image_width + dx
 		xmax = xmax * new_width / image_width + dx
 		ymin = ymin * new_high / image_high + dy
@@ -529,19 +502,31 @@ class Parser:
 		bbox = tf.concat([xmin, ymin, xmax, ymax, label], 1)
 		if self.mode == 'train':
 			def _flip_left_right_boxes(boxes):
-				xmin, ymin, xmax, ymax, label = tf.split(value = boxes, num_or_size_splits = 5, axis = 1)
+				xmin, ymin, xmax, ymax, label = tf.split(value=boxes, num_or_size_splits=5, axis = 1)
 				flipped_xmin = tf.subtract(input_width, xmax)
 				flipped_xmax = tf.subtract(input_width, xmin)
 				flipped_boxes = tf.concat([flipped_xmin, ymin, flipped_xmax, ymax, label], 1)
 				return flipped_boxes
-			flip_left_right = tf.greater(tf.random_uniform([], dtype = tf.float32, minval = 0, maxval = 1), 0.5)
-			image = tf.cond(flip_left_right, lambda : tf.image.flip_left_right(image), lambda : image)
+			flip_left_right = tf.greater(tf.random_uniform([], dtype=tf.float32, minval=0, maxval=1), 0.3)
+			image = tf.cond(flip_left_right, lambda: tf.image.flip_left_right(image), lambda: image)
 			bbox = tf.cond(flip_left_right, lambda: _flip_left_right_boxes(bbox), lambda: bbox)
 
+			random_saturation = tf.greater(tf.random_uniform([], dtype=tf.float32, minval=0, maxval=1), 0.3)
+			image = tf.cond(random_saturation, lambda: tf.image.random_saturation(image=image, lower=0.4, upper=config.sat), lambda: image)
+
+			random_hue = tf.greater(tf.random_uniform([], dtype=tf.float32, minval=0, maxval=1), 0.3)
+			image = tf.cond(random_hue, lambda: tf.image.random_hue(image=image, max_delta=config.hue), lambda: image)
+
+			random_contrast = tf.greater(tf.random_uniform([], dtype=tf.float32, minval=0, maxval=1), 0.3)
+			image = tf.cond(random_contrast, lambda: tf.image.random_contrast(image=image, lower=0.4, upper=config.cont), lambda: image)
+
+			random_brit = tf.greater(tf.random_uniform([], dtype=tf.float32, minval=0, maxval=1), 0.3)
+			image = tf.cond(random_brit, lambda: tf.image.random_brightness(image=image, max_delta=config.bri), lambda: image)
+
 		image = image / 255.
-		image = tf.clip_by_value(image, clip_value_min = 0.0, clip_value_max = 1.0)
-		bbox = tf.clip_by_value(bbox, clip_value_min = 0, clip_value_max = input_width - 1)
-		bbox = tf.cond(tf.greater(tf.shape(bbox)[0], config.max_boxes), lambda: bbox[:config.max_boxes], lambda: tf.pad(bbox, paddings = [[0, config.max_boxes - tf.shape(bbox)[0]], [0, 0]], mode = 'CONSTANT'))
+		image = tf.clip_by_value(image, clip_value_min=0.0, clip_value_max=1.0)
+		bbox = tf.clip_by_value(bbox, clip_value_min=0, clip_value_max=self.input_shape - 1)
+		bbox = tf.cond(tf.greater(tf.shape(bbox)[0], config.max_boxes), lambda: bbox[:config.max_boxes], lambda: tf.pad(bbox, paddings=[[0, config.max_boxes - tf.shape(bbox)[0]], [0, 0]], mode = 'CONSTANT'))
 		return image, bbox
 
 
@@ -554,8 +539,8 @@ class Parser:
 		"""
 
 		with tf.name_scope('data_parser/'):
-			dataset = tf.data.TFRecordDataset(filenames = self.TfrecordFile)
-			dataset = dataset.map(self.parser, num_parallel_calls = 10)
+			dataset = tf.data.TFRecordDataset(filenames=self.TfrecordFile)
+			dataset = dataset.map(self.parser, num_parallel_calls=config.num_parallel_calls)
 			if self.mode == 'train':
 				dataset = dataset.repeat().shuffle(500).batch(batch_size).prefetch(batch_size)
 			else:

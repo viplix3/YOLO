@@ -42,7 +42,7 @@ def read_anchors(file_path):
 	return np.asarray(anchors)
 
 
-def train(ckpt_path, log_path, class_path, decay_steps=2000, decay_rate=0.8):
+def train(ckpt_path, log_path, class_path):
 	""" Function to train the model.
 		ckpt_path: string, path for saving/restoring the model
 		log_path: string, path for saving the training/validation logs
@@ -54,10 +54,13 @@ def train(ckpt_path, log_path, class_path, decay_steps=2000, decay_rate=0.8):
 
 	# Getting the anchors
 	anchors = read_anchors(config.anchors_path)
-	if not os.path.exists(config.data_dir):
-		os.mkdir(config.data_dir)
 
 	classes = get_classes(class_path)
+
+	if anchors.shape[0] // 3 == 2:
+		yolo_tiny = True
+	else:
+		yolo_tiny = False
 
 	# Building the training pipeline
 	graph = tf.get_default_graph()
@@ -66,14 +69,14 @@ def train(ckpt_path, log_path, class_path, decay_steps=2000, decay_rate=0.8):
 
 		# Getting the training data
 		with tf.name_scope('data_parser/'):
-			train_reader = Parser('train', config.data_dir, config.anchors_path, config.output_dir, 
+			train_reader = Parser('train', config.anchors_path, config.output_dir, 
 				config.num_classes, input_shape=config.input_shape, max_boxes=config.max_boxes)
 			train_data = train_reader.build_dataset(config.train_batch_size//config.subdivisions)
 			train_iterator = train_data.make_one_shot_iterator()
 
-			val_reader = Parser('val', config.data_dir, config.anchors_path, config.output_dir, 
+			val_reader = Parser('val', config.anchors_path, config.output_dir, 
 				config.num_classes, input_shape=config.input_shape, max_boxes=config.max_boxes)
-			val_data = val_reader.build_dataset(config.val_batch_size//config.subdivisions)
+			val_data = val_reader.build_dataset(config.val_batch_size)
 			val_iterator = val_data.make_one_shot_iterator()
 
 
@@ -88,15 +91,17 @@ def train(ckpt_path, log_path, class_path, decay_steps=2000, decay_rate=0.8):
 				# images, bbox, bbox_true_13, bbox_true_26, bbox_true_52 = val_iterator.get_next()
 				return val_iterator.get_next()
 
-			images, bbox, bbox_true_13, bbox_true_26, bbox_true_52 = tf.cond(pred=tf.equal(mode, 1), true_fn = train, false_fn = valid, name='train_val_cond')
+			if yolo_tiny:
+				images, bbox, bbox_true_13, bbox_true_26 = tf.cond(pred=tf.equal(mode, 1), true_fn = train, false_fn = valid, name='train_val__data')
+				grid_shapes = [config.input_shape // 32, config.input_shape // 16]
+			else:
+				images, bbox, bbox_true_13, bbox_true_26, bbox_true_52 = tf.cond(pred=tf.equal(mode, 1), true_fn = train, false_fn = valid, name='train_val_data')
+				grid_shapes = [config.input_shape // 32, config.input_shape // 16, config.input_shape // 8]
 
 			images.set_shape([None, config.input_shape, config.input_shape, 3])
 			bbox.set_shape([None, config.max_boxes, 5])
 
-			grid_shapes = [config.input_shape // 32, config.input_shape // 16, config.input_shape // 8]
-			draw_box(images, bbox)
-
-
+			# image_summary = draw_box(images, bbox)
 
 		# Extracting the pre-defined yolo graph from the darknet cfg file
 		if not os.path.exists(ckpt_path):
@@ -106,56 +111,97 @@ def train(ckpt_path, log_path, class_path, decay_steps=2000, decay_rate=0.8):
 
 		# Declaring the parameters for GT
 		with tf.name_scope('Targets'):
-			bbox_true_13.set_shape([None, grid_shapes[0], grid_shapes[0], 3, 5 + config.num_classes])
-			bbox_true_26.set_shape([None, grid_shapes[1], grid_shapes[1], 3, 5 + config.num_classes])
-			bbox_true_52.set_shape([None, grid_shapes[2], grid_shapes[2], 3, 5 + config.num_classes])
-		y_true = [bbox_true_13, bbox_true_26, bbox_true_52]
+			if yolo_tiny:
+				bbox_true_13.set_shape([None, grid_shapes[0], grid_shapes[0], config.num_anchors_per_scale, 5 + config.num_classes])
+				bbox_true_26.set_shape([None, grid_shapes[1], grid_shapes[1], config.num_anchors_per_scale, 5 + config.num_classes])
+				y_true = [bbox_true_13, bbox_true_26]
+			else:
+				bbox_true_13.set_shape([None, grid_shapes[0], grid_shapes[0], config.num_anchors_per_scale, 5 + config.num_classes])
+				bbox_true_26.set_shape([None, grid_shapes[1], grid_shapes[1], config.num_anchors_per_scale, 5 + config.num_classes])				
+				bbox_true_52.set_shape([None, grid_shapes[2], grid_shapes[2], config.num_anchors_per_scale, 5 + config.num_classes])
+				y_true = [bbox_true_13, bbox_true_26, bbox_true_52]
 
 
 		# Compute Loss
 		with tf.name_scope('Loss_and_Detect'):
-			yolo_loss = compute_loss(output, y_true, anchors, config.num_classes, print_loss=False)
+			loss_scale, yolo_loss, xy_loss, wh_loss, obj_loss, noobj_loss, conf_loss, class_loss = compute_loss(output, y_true, anchors, config.num_classes, ignore_threshold=config.ignore_thresh)
 			l2_loss = tf.losses.get_regularization_loss()
-			loss = yolo_loss+l2_loss
+			loss = yolo_loss + l2_loss
+			exponential_moving_average_op = tf.train.ExponentialMovingAverage(config.weight_decay).apply(var_list=tf.trainable_variables()) # For regularisation
+			scale1_loss_summary = tf.summary.scalar('scale_loss_1', loss_scale[0])
+			scale2_loss_summary = tf.summary.scalar('scale_loss_2', loss_scale[1])
 			yolo_loss_summary = tf.summary.scalar('yolo_loss', yolo_loss)
 			l2_loss_summary = tf.summary.scalar('l2_loss', l2_loss)
 			total_loss_summary = tf.summary.scalar('Total_loss', loss)
+			xy_loss_summary = tf.summary.scalar('xy_loss', xy_loss)
+			wh_loss_summary = tf.summary.scalar('wh_loss', wh_loss)
+			obj_loss_summary = tf.summary.scalar('obj_loss', obj_loss)
+			noobj_loss_summary = tf.summary.scalar('noobj_loss', noobj_loss)
+			conf_loss_summary = tf.summary.scalar('confidence_loss', conf_loss)
+			class_loss_summary = tf.summary.scalar('class_loss', class_loss)
 
 
 		# Declaring the parameters for training the model
 		with tf.name_scope('train_parameters'):
-			epoch_loss = []
 			global_step = tf.Variable(0, trainable=False, name='global_step')
-			learning_rate = tf.train.exponential_decay(config.learning_rate, global_step,
-				decay_steps, decay_rate)
+
+			def learning_rate_scheduler(learning_rate, scheduler_name, global_step, decay_steps=100):
+				if scheduler_name == 'exponential':
+					lr =  tf.train.exponential_decay(learning_rate, global_step,
+						decay_steps, decay_rate, staircase=True, name='exponential_learning_rate')
+					return tf.maximum(lr, config.learning_rate_lower_bound)
+				elif scheduler_name == 'polynomial':
+					lr =  tf.train.polynomial_decay(learning_rate, global_step,
+						decay_steps, config.learning_rate_lower_bound, power=0.8, cycle=True, name='polynomial_learning_rate')
+					return tf.maximum(lr, config.learning_rate_lower_bound)
+				elif scheduler_name == 'cosine':
+					lr = tf.train.cosine_decay(learning_rate, global_step,
+						decay_steps, alpha=0.5, name='cosine_learning_rate')
+					return tf.maximum(lr, config.learning_rate_lower_bound)
+				elif scheduler_name == 'linear':
+					return tf.convert_to_tensor(learning_rate, name='linear_learning_rate')
+				else:
+					raise ValueError('Unsupported learning rate scheduler\n[supported types: exponential, polynomial, linear]')
+
+
+			if config.use_warm_up:
+				learning_rate = tf.cond(pred=tf.less(global_step, config.burn_in_epochs * (config.train_num // config.train_batch_size)),
+					true_fn=lambda: learning_rate_scheduler(config.init_learning_rate, config.warm_up_lr_scheduler, global_step),
+					false_fn=lambda: learning_rate_scheduler(config.learning_rate, config.lr_scheduler, global_step, decay_steps=500))
+			else:
+				learning_rate = learning_rate_scheduler(config.learning_rate, config.lr_scheduler, global_step, decay_steps=2000)
+
 			tf.summary.scalar('learning rate', learning_rate)
 
 
 		# Define optimizer for minimizing the computed loss
 		with tf.name_scope('Optimizer'):
-			#optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=config.momentum)
-			optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+			optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=config.momentum)
+			# optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+			# optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate, momentum=config.momentum)
 			update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 			with tf.control_dependencies(update_ops):
-				if config.pre_train:
-					train_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='yolo')
-					grads = optimizer.compute_gradients(loss=loss, var_list=train_vars)
-					gradients = [(tf.placeholder(dtype=tf.float32, shape=grad[1].get_shape()), grad[1]) for grad in grads]
-					gradients = gradients * config.subdivisions
-					train_step = optimizer.apply_gradients(grads_and_vars=gradients, global_step=global_step)
-				else:
-					grads = optimizer.compute_gradients(loss=loss)
-					gradients = [(tf.placeholder(dtype=tf.float32, shape=grad[1].get_shape()), grad[1]) for grad in grads]
-					gradients = gradients * config.subdivisions
-					train_step = optimizer.apply_gradients(grads_and_vars=gradients, global_step=global_step)
+				# grads = optimizer.compute_gradients(loss=loss)
+				# gradients = [(tf.placeholder(dtype=tf.float32, shape=grad[1].get_shape()), grad[1]) for grad in grads]
+				# train_step = optimizer.apply_gradients(grads_and_vars=gradients, global_step=global_step)
+				optimizing_op = optimizer.minimize(loss=loss, global_step=global_step)
+			
+			with tf.control_dependencies([optimizing_op]):
+				with tf.control_dependencies([exponential_moving_average_op]):
+					train_op_with_mve = tf.no_op()
+			train_op = train_op_with_mve
 
 
 
 #################################### Training loop ############################################################
 		# A saver object for saving the model
-		best_ckpt_saver = checkmate.BestCheckpointSaver(save_dir=ckpt_path, num_to_keep=5)
+		best_ckpt_saver_train = checkmate.BestCheckpointSaver(save_dir=ckpt_path+'train/', num_to_keep=5)
+		best_ckpt_saver_valid = checkmate.BestCheckpointSaver(save_dir=ckpt_path+'valid/', num_to_keep=5)
 		summary_op = tf.summary.merge_all()
-		summary_op_valid = tf.summary.merge([yolo_loss_summary, l2_loss_summary, total_loss_summary])
+		summary_op_valid = tf.summary.merge([yolo_loss_summary, l2_loss_summary, total_loss_summary, xy_loss_summary, wh_loss_summary, 
+			obj_loss_summary, noobj_loss_summary, conf_loss_summary, class_loss_summary, scale1_loss_summary, scale2_loss_summary])
+		# summary_op_valid = tf.summary.merge([image_summary, yolo_loss_summary, l2_loss_summary, total_loss_summary, xy_loss_summary, wh_loss_summary, 
+		# 	obj_loss_summary, noobj_loss_summary, conf_loss_summary, class_loss_summary, scale1_loss_summary, scale2_loss_summary])
 		init_op = tf.global_variables_initializer()
 
 
@@ -169,12 +215,13 @@ def train(ckpt_path, log_path, class_path, decay_steps=2000, decay_rate=0.8):
 		val_summary_writer = tf.summary.FileWriter(os.path.join(log_path, 'val'), sess.graph)
 		
 		# Restoring the model
-		ckpt = tf.train.get_checkpoint_state(ckpt_path)
+		ckpt = tf.train.get_checkpoint_state(ckpt_path+'train/')
 		if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
-			print('Restoring model ', checkmate.get_best_checkpoint(ckpt_path))
-			tf.train.Saver().restore(sess, checkmate.get_best_checkpoint(ckpt_path))
+			print('Restoring model ', checkmate.get_best_checkpoint(ckpt_path+'train/'))
+			tf.train.Saver().restore(sess, checkmate.get_best_checkpoint(ckpt_path+'train/'))
 			print('Model Loaded!')
 		elif config.pre_train is True:
+			sess.run(init_op)
 			load_ops = load_weights(tf.global_variables(scope='darknet53'), config.darknet53_weights_path)
 			sess.run(load_ops)
 		else:
@@ -191,18 +238,10 @@ def train(ckpt_path, log_path, class_path, decay_steps=2000, decay_rate=0.8):
 
 			trainbar = tqdm(range(config.train_num//config.train_batch_size))
 			for k in trainbar:
-				total_grad = []
-				for minibach in range(config.subdivisions):
-					train_summary, loss_train, grads_and_vars = sess.run([summary_op, loss,
-						grads], feed_dict={is_training: True, mode: 1})
-					total_grad += grads_and_vars
 
-				feed_dict = {is_training: True, mode: 1}
-				for i in range(len(gradients)):
-					feed_dict[gradients[i][0]] = total_grad[i][0]
-				# print(np.shape(feed_dict))
+				num_steps, train_summary, loss_train, _ = sess.run([global_step, summary_op, loss,
+					train_op], feed_dict={is_training: True, mode: 1})
 
-				_ = sess.run(train_step, feed_dict=feed_dict)
 				train_summary_writer.add_summary(train_summary, epoch)
 				train_summary_writer.flush()
 				mean_loss_train.append(loss_train)
@@ -212,14 +251,11 @@ def train(ckpt_path, log_path, class_path, decay_steps=2000, decay_rate=0.8):
 			print('Validating.....')
 			valbar = tqdm(range(config.val_num//config.val_batch_size))
 			for k in valbar:
-
 				val_summary, loss_valid = sess.run([summary_op_valid, loss], feed_dict={is_training: False, mode: 0})
-
 				val_summary_writer.add_summary(val_summary, epoch)
 				val_summary_writer.flush()
 				mean_loss_valid.append(loss_valid)
 				valbar.set_description('Validation loss: %s' %str(loss_valid))
-
 
 			mean_loss_train = np.mean(mean_loss_train)
 			mean_loss_valid = np.mean(mean_loss_valid)
@@ -229,13 +265,21 @@ def train(ckpt_path, log_path, class_path, decay_steps=2000, decay_rate=0.8):
 			print('Validation loss after %d epochs is: %f' %(epoch+1, mean_loss_valid))
 			print('\n\n')
 
-			if ((epoch+1)%3) == 0:
-				best_ckpt_saver.handle(mean_loss_valid, sess, tf.constant(epoch))
+			if (config.use_warm_up):
+				if (num_steps > config.burn_in_epochs * (config.train_num // config.train_batch_size)):
+					best_ckpt_saver_train.handle(mean_loss_train, sess, global_step)
+					best_ckpt_saver_valid.handle(mean_loss_valid, sess, global_step)
+				else:
+					continue
+			else:
+				best_ckpt_saver_train.handle(mean_loss_train, sess, global_step)
+				best_ckpt_saver_valid.handle(mean_loss_valid, sess, global_step)
 
 		print('Tuning Completed!!')
 		train_summary_writer.close()
 		val_summary_writer.close()
 		sess.close()
+
 
 
 

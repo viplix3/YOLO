@@ -104,7 +104,7 @@ def predict(output_nodes, anchors, num_classes, input_shape, image_shape):
 	max_boxes = config.max_boxes
 	num_output_layers = len(output_nodes)
 	anchor_mask = [[6,7,8], [3,4,5], [0,1,2]] if num_output_layers==3 else [
-		[3,4,5], [1,2,3]] # default setting
+		[3,4,5], [0,1,2]] # default setting
 	boxes, box_scores = [], []
 
 	for l in range(num_output_layers): # Making prediction for 3 scales
@@ -165,8 +165,6 @@ def predict(output_nodes, anchors, num_classes, input_shape, image_shape):
 		classes = tf.concat(classes_, axis=0)
 
 		return boxes, scores, classes
-
-
 
 
 def run_inference(img_path, output_dir,  args):
@@ -258,8 +256,9 @@ def run_inference(img_path, output_dir,  args):
 				sess.run(load_op)
 
 			else:
-				ckpt_path = config.model_dir
-				saver = tf.train.Saver()
+				ckpt_path = config.model_dir + 'valid/'
+				exponential_moving_average_obj = tf.train.ExponentialMovingAverage(config.weight_decay)
+				saver = tf.train.Saver(exponential_moving_average_obj.variables_to_restore())
 				ckpt = tf.train.get_checkpoint_state(ckpt_path)
 				if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
 					print('Restoring model ', checkmate.get_best_checkpoint(ckpt_path))
@@ -285,16 +284,17 @@ def run_inference(img_path, output_dir,  args):
 	 	######################## Visualization ######################
 		font = ImageFont.truetype(font='./font/FiraMono-Medium.otf', 
 			size=np.floor(1e-2 * image.shape[1] + 0.5).astype(np.int32))
-		thickness = (image.shape[0] + image.shape[1]) // 1000  # do day cua BB
+		thickness = (image.shape[0] + image.shape[1]) // 500  # do day cua BB
 
 		image = Image.fromarray((image).astype('uint8'), mode='RGB')
-		output_labels = open(os.path.join(output_dir_labels, file_names[x].split(',')[0]+'.txt'), 'w')
+		output_labels = open(os.path.join(output_dir_labels, file_names[x].split('.')[0]+'.txt'), 'w')
 		for i, c in reversed(list(enumerate(out_classes))):
 			predicted_class = class_names[c]
+
 			box = out_boxes[i]
 			score = out_scores[i]
 
-			label = '{} {:.2f}'.format(predicted_class, score)
+			label = '{} {:.4f}'.format(predicted_class, score)
 			draw = ImageDraw.Draw(image)
 			label_size = draw.textsize(label, font)
 			# print(label_size)

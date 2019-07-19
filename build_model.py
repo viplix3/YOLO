@@ -1,3 +1,4 @@
+# Importing stuff
 import warnings
 warnings.filterwarnings("ignore")
 import configparser
@@ -50,7 +51,7 @@ def yolo(input_images, is_training, config_path, num_classes):
 	assert config_path.endswith('.cfg'), '{} is not a .cfg file'.format(config_path)
 
 	if not os.path.exists(config.yolov3_cfg_path):
-		print('cfg file not found.....\nPlease get the yolov3.cfg file from https://github.com/pjreddie/darknet/blob/master/cfg/yolov3.cfg')
+		print('cfg file not found.....\nPlease get the yolov3.cfg file from https://github.com/pjreddie/darknet/blob/master/cfg/')
 		exit()
 
 	# Loading and config file
@@ -89,7 +90,7 @@ def yolo(input_images, is_training, config_path, num_classes):
 	feature_extractor_conv_count = config.feature_extractor_conv_count
 	count = -1 # Counts the total layers
 	out_index = []
-	layer_count = -1 # Counts ths convolutional layers
+	layer_count = -1 # Counts the convolutional layers
 	scope = 'darknet53/'
 	switch_scope = False
 
@@ -154,7 +155,7 @@ def yolo(input_images, is_training, config_path, num_classes):
 
 					if ((layer_count==out_layers[0]) or (layer_count==out_layers[1]) or 
 					(layer_count==out_layers[2])):
-						conv_layer = tf.layers.conv2d(inputs=prev_layer, filters=3*(num_classes+5), kernel_size=size, strides=[stride, stride], kernel_initializer=initializer,
+						conv_layer = tf.layers.conv2d(inputs=prev_layer, filters=config.num_anchors_per_scale*(num_classes+5), kernel_size=size, strides=[stride, stride], kernel_initializer=initializer,
 								padding=padding, kernel_regularizer=regularizer, use_bias=1-batch_normalization, name=scope+section)
 					else:
 						conv_layer = tf.layers.conv2d(inputs=prev_layer, filters=filters, kernel_size=size, strides=[stride, stride], kernel_initializer=initializer,
@@ -162,7 +163,7 @@ def yolo(input_images, is_training, config_path, num_classes):
 
 					if batch_normalization:
 						with tf.name_scope('batch_norm'):
-							bn_layer = tf.layers.batch_normalization(inputs=conv_layer, momentum=momentum, epsilon=1e-3, center=True, scale=True, training=is_training, name=scope+section+'/batch_norm')
+							bn_layer = tf.layers.batch_normalization(inputs=conv_layer, momentum=momentum, epsilon=1e-5, training=is_training, name=scope+section+'/batch_norm')
 						conv_layer = bn_layer
 
 

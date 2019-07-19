@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 import os
+import sys
 import config
 from utils.utils import resize_image
 
@@ -72,13 +73,16 @@ def kmeans(boxes, k):
 	# Optimizarion loop
 	while True:
 
-		distances = 1 - iou(boxes, clusters) # as described in YOLO900 paper
+		distances = 1 - iou(boxes, clusters)
+		mean_distance = np.mean(distances)
+		sys.stdout.write('\r>> Mean loss: %f' % (mean_distance))
+		sys.stdout.flush()
 
 		current_nearest = np.argmin(distances, axis=1)
 		if(last_cluster == current_nearest).all():
 			break # The model is converged
 		for cluster in range(k):
-			clusters[cluster] = np.median(boxes[current_nearest == cluster], axis=0)
+			clusters[cluster] = np.mean(boxes[current_nearest == cluster], axis=0)
 
 		last_cluster = current_nearest
 	return clusters
@@ -89,7 +93,7 @@ def dump_results(data):
 		Input:
 			data: array, containing the data for anchor boxes
 	"""
-	f = open("./yolo_anchors.txt", 'w')
+	f = open("./anchors.txt", 'w')
 	row = np.shape(data)[0]
 	for i in range(row):
 		x_y = "%d %d\n" % (data[i][0], data[i][1])
@@ -109,6 +113,8 @@ def get_boxes(file_path):
 		for line in f:
 			infos = line.split(' ')
 			length = len(infos)
+			sys.stdout.write('\r>> Reading image: %s' % (infos[0].split('/')[-1]))
+			sys.stdout.flush()
 			img = cv2.imread(infos[0])
 			image_width, image_height = img.shape[1], img.shape[0]
 			scale = np.minimum(config.input_shape / image_width, config.input_shape / image_height)
@@ -126,6 +132,8 @@ def get_boxes(file_path):
 				ymax = int(ymax * new_height/image_height + dy)
 				width = xmax - xmin
 				height = ymax - ymin
+				if (width == 0) or (height == 0):
+					continue
 				dataSet.append([width, height])
 	result = np.array(dataSet)
 	return result
@@ -140,10 +148,11 @@ def get_clusters(num_clusters, file_path):
 			Returns avg_accuracy of computer anchor box over the whole dataset
 	"""
 	all_boxes = get_boxes(file_path)
+	print('\n')
 	result = kmeans(all_boxes, num_clusters)
 	result = result[np.lexsort(result.T[0, None])]
 	dump_results(result)
-	print("{} anchors:\n{}".format(num_clusters, result))
+	print("\n\n{} anchors:\n{}".format(num_clusters, result))
 	avg_acc = avg_iou(all_boxes, result)*100
 	print("Average accuracy: {:.2f}%".format(avg_acc))
 
@@ -152,7 +161,7 @@ def get_clusters(num_clusters, file_path):
 
 if __name__ == '__main__':
 
-	min_cluster, max_cluster = 9, 10
+	min_cluster, max_cluster = config.num_anchors, config.num_anchors + 1
 	clusters = np.arange(min_cluster, max_cluster, dtype=int)
 	avg_accuracy = []
 	for i in clusters:

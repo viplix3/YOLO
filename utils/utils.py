@@ -3,9 +3,10 @@ import cv2
 from PIL import Image, ImageDraw
 import matplotlib.pyplot as plt
 
+
 def resize_image(image_data, size):
 	""" Resizes the image without changing the aspect ratio with padding, so that
-		the image size is as per model requirement.
+		the image size is divisible by 32, as per YOLO requirement.
 		Input:
 			image_data: array, original image data
 			size: tuple, size the image is to e resized into
@@ -64,16 +65,14 @@ def yolo_head(output, anchors, num_classes, input_shape, calc_loss=False):
 		# grid: [input_shape/16, input_shape/16] for scale 2
 		# grid: [input_shape/8, input_shape/8] for scale 3
 
-		# In YOLO the height index is the innermost iteration
-		# All the numbers in comments assume the grid is of shape 13x13
-		grid_y = tf.range(0, grid_shape[0]) # array[0, 1, 2, ......, 11, 12]
-		grid_x = tf.range(0, grid_shape[1])
-		grid_y = tf.reshape(grid_y, [-1, 1, 1, 1]) # shape: [13, 1, 1, 1]
-		grid_x = tf.reshape(grid_x, [1, -1, 1, 1]) # shape: [1, 13, 1, 1]
-		grid_y = tf.tile(grid_y, [1, grid_shape[1], 1, 1]) # [13, 1, 1, 1] ---> [13, 13, 1, 1]
-		grid_x = tf.tile(grid_x, [grid_shape[0], 1, 1, 1]) # [1, 13, 1, 1] ---> [13, 13, 1, 1]
-		grid = tf.concat([grid_x, grid_y], axis=-1) # shape: [13, 13, 1, 2]
-		grid = tf.cast(grid, dtype=output.dtype) # change dtype
+		grid_x = tf.range(grid_shape[1], dtype=tf.int32) # [0, 1, 2, ..., 12]
+		grid_y = tf.range(grid_shape[0], dtype=tf.int32) # [0, 1, 2, ..., 12]
+		meshed_x, meshed_y = tf.meshgrid(grid_x, grid_y)
+		x_offset = tf.reshape(meshed_x, (-1, 1))
+		y_offset = tf.reshape(meshed_y, (-1, 1))
+		xy_offset = tf.concat([x_offset, y_offset], axis=-1)
+		xy_offset = tf.reshape(xy_offset, [grid_shape[0], grid_shape[1], 1, 2])
+		xy_offset = tf.cast(xy_offset, dtype=output.dtype)
 
 	# Reshaping the output tensor into the form:
 	#	[batch_size, grid_x, grid_y, num_anchors, box_parameters+classes]
@@ -84,17 +83,17 @@ def yolo_head(output, anchors, num_classes, input_shape, calc_loss=False):
 		# We apply activations on the top of the output feature map to get the outputs
 		box_xy = tf.nn.sigmoid(output[..., :2], name='x_y') # [None, 13, 13, 3, 2] 
 		box_wh = tf.exp(output[..., 2:4], name='w_h') # [None, 13, 13, 3, 2]
-		box_confidence = tf.sigmoid(output[..., 4:5]) # [None, 13, 13, 3, 1]
-		box_class_probs = tf.sigmoid(output[..., 5:]) # [None, 13, 13, 3, num_classes]
+		box_confidence = tf.nn.sigmoid(output[..., 4:5]) # [None, 13, 13, 3, 1]
+		box_class_probs = tf.nn.sigmoid(output[..., 5:]) # [None, 13, 13, 3, num_classes]
 
-		# Adjust rpedictions to each spatial grid point and anchor size
+		# Adjust pedictions to each spatial grid point and anchor size
 		# NOTE: YOLO iterates over height before the width
-		box_xy = (box_xy + grid) / tf.cast(grid_shape[::-1], # (x, y + grid)/13 ---> b/w (0, 1)
+		box_xy = (box_xy + xy_offset) * tf.cast(input_shape[::-1] // tf.cast(grid_shape[::-1], dtype=output.dtype), # absolute values [mid_x, mid_y] of predicted box
 			dtype=output.dtype) # [None, 13, 13, 3, 2]
-		box_wh = box_wh * anchors_tensor / tf.cast(input_shape[::-1], dtype=output.dtype)
+		box_wh = box_wh * anchors_tensor # absolute values [width, height] of predicted box
 
 	if calc_loss == True:
-		return grid, output, box_xy, box_wh
+		return xy_offset, output, box_xy, box_wh
 	return box_xy, box_wh, box_confidence, box_class_probs
 
 
@@ -103,43 +102,30 @@ def yolo_correct_boxes(box_xy, box_wh, input_shape, image_shape):
 	""" Rescales the boxes according to the image_shape from the input_shape
 		Input:
 			box_xy, array, xy coordinates of box_mid
-			box_wh, array, width and height of the boc
+			box_wh, array, width and height of the box
 			input_shape: shape of the input of the model
 			image_shape: input image shape
 		Output:
-			boxes: array, containing [x_min, y_min, x_max, y_max]
+			boxes: array, containing [y_min, x_min, y_max, x_max]
 	"""
 
-	# Because YOLO iterated over height before width, moreover tf.image.non_max_suppression
-	# expects the Bounding Box paameters in this format only
-	box_yx = box_xy[..., ::-1]
-	box_hw = box_wh[..., ::-1]
-	input_shape = tf.cast(input_shape, dtype=box_yx.dtype)
-	image_shape = tf.cast(image_shape, dtype=box_hw.dtype)
+	input_shape = tf.cast(input_shape, dtype=box_xy.dtype)
+	image_shape = tf.cast(image_shape, dtype=box_wh.dtype)
 
-	# Getting the scale and offset of the bounding boxes for the image_size
-	new_shape = tf.round(image_shape * tf.reduce_min(input_shape/image_shape))
-	offset = (input_shape-new_shape)/2./input_shape
-	scale = input_shape/new_shape
+	scale = tf.reduce_min(input_shape/image_shape)
+	new_shape = tf.round(image_shape * scale)
+	offset = (input_shape-new_shape)
 
-	# Changing the predictions
-	box_yx = (box_yx - offset) * scale # Moving the coordinates by offset and scaling 
-	box_hw *= scale # Scaling the dimentions of the offset
+	box_mins = box_xy - (box_wh / 2.)
+	box_maxes = box_xy + (box_wh / 2.)
 
-	box_mins = box_yx - (box_hw / 2.)
-	box_maxes = box_yx + (box_hw / 2.)
-
-	# # Git Implementation
+	# [y_min, x_min, y_max, x_max] as we will be using tf.image.non_max_suppression
 	boxes = tf.concat([
-		box_mins[..., 0:1],  # y_min
-		box_mins[..., 1:2], # x_min
-		box_maxes[..., 0:1], # y_max
-		box_maxes[..., 1:2] , # x_max
+		(box_mins[..., 1:2] - offset[0]/2.) * (image_shape[0] / (input_shape[0] - offset[0])),  # y_min
+		(box_mins[..., 0:1] - offset[1]/2.) * (image_shape[1] / (input_shape[1] - offset[1])), # x_min
+		(box_maxes[..., 1:2] - offset[0]/2.) * (image_shape[0] / (input_shape[0] - offset[0])), # y_max
+		(box_maxes[..., 0:1] - offset[1]/2.) * (image_shape[1] / (input_shape[1]  - offset[1])), # x_max
 		], axis=-1)
-
-
-	# Scale boxes back to the original shape
-	boxes = tf.multiply(boxes, tf.concat([image_shape, image_shape], axis=-1))
 
 	return boxes
 
@@ -179,4 +165,4 @@ def draw_box(image, bbox):
 		weight = tf.cast(tf.shape(image)[2], tf.float32)
 		new_bbox = tf.concat([tf.cast(ymin, tf.float32) / height, tf.cast(xmin, tf.float32) / weight, tf.cast(ymax, tf.float32) / height, tf.cast(xmax, tf.float32) / weight], 2)
 		new_image = tf.image.draw_bounding_boxes(image, new_bbox)
-		tf.summary.image('input', new_image)
+		return tf.summary.image('image', tensor=new_image)
