@@ -13,7 +13,7 @@
 - [x] Speed evaluation
 - [X] Training on raccoon dataset
 - [x] Subdivisions implentation - aids in training big batches with small GPU vRAM
-- [ ] SGD with burn-in
+- [x] Multiple learning rate scheduler with burn-in
 - [ ] mAP evaluation
 - [ ] Training on VOC
 
