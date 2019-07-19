@@ -18,6 +18,7 @@
 - [ ] Multi-resolution training
 - [ ] Multi resolution inference
 - [ ] Multi-GPU training
+- [ ] Fine-tuning on any dataset
 - [ ] [Focal Loss](https://arxiv.org/abs/1708.02002)
 - [ ] [GIoU](https://giou.stanford.edu/) training 
 - [ ] mAP evaluation
