@@ -7,11 +7,11 @@
 
 ## TODO
 ------
-- [x] YOLOv3-darknet to tensorflow conversion (inference only)
+- [x] [YOLOv3](https://pjreddie.com/darknet/yolo/) C to tensorflow conversion (inference only)
 - [x] Inference script
 - [x] Training pipeline
 - [x] Speed evaluation
-- [X] Training on raccoon dataset
+- [X] Training on [raccoon dataset](https://github.com/experiencor/raccoon_dataset)
 - [x] Subdivisions implentation - aids in training big batches with small GPU vRAM
 - [x] Multiple learning rate scheduler with burn-in
 - [x] Protobuf file generation and inference
@@ -20,7 +20,7 @@
 - [ ] [Focal Loss](https://arxiv.org/abs/1708.02002)
 - [ ] [GIoU](https://giou.stanford.edu/) training 
 - [ ] mAP evaluation
-- [ ] Training on VOC
+- [ ] Training on [Pascal VOC](http://host.robots.ox.ac.uk/pascal/VOC/) dataset
 
 Suggestions and pull requests are most welcome
 
