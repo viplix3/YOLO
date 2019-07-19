@@ -17,6 +17,7 @@
 - [x] Protobuf file generation and inference
 - [ ] Multi-resolution training
 - [ ] Multi resolution inference
+- [ ] Multi-GPU training
 - [ ] [Focal Loss](https://arxiv.org/abs/1708.02002)
 - [ ] [GIoU](https://giou.stanford.edu/) training 
 - [ ] mAP evaluation
