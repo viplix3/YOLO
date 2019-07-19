@@ -14,6 +14,11 @@
 - [X] Training on raccoon dataset
 - [x] Subdivisions implentation - aids in training big batches with small GPU vRAM
 - [x] Multiple learning rate scheduler with burn-in
+- [x] Protobuf file generation and inference
+- [ ] Multi-resolution training
+- [ ] Multi resolution inference
+- [ ] [Focal Loss](https://arxiv.org/abs/1708.02002)
+- [ ] [GIoU](https://giou.stanford.edu/) training 
 - [ ] mAP evaluation
 - [ ] Training on VOC
 
