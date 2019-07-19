@@ -19,7 +19,7 @@
 - [ ] Multi resolution inference
 - [ ] Multi-GPU training
 - [ ] Fine-tuning on any dataset
-- [ ] [Focal Loss](https://arxiv.org/abs/1708.02002)
+- [x] [Focal Loss](https://arxiv.org/abs/1708.02002) Note - A special case of focal loss has been implemented where alpha=0.5 and gamma=2.
 - [ ] [GIoU](https://giou.stanford.edu/) training 
 - [ ] mAP evaluation
 - [ ] Training on [Pascal VOC](http://host.robots.ox.ac.uk/pascal/VOC/) dataset

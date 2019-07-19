@@ -1,33 +1,34 @@
 import tensorflow as tf
-from utils.utils import yolo_head
+from utils.utils import get_head
 import config
 
 
-def compute_loss(output, y_true, anchors, num_classes, ignore_threshold=0.5, object_scale=1, print_loss=False):
-    """ Computes the custom written YOLO loss for provided output.
-    	Input:
-    		output: array, output of YOLO for provided input image
-    		y_true: array, y_true label corresponding to the output produced from GT
-    		anchors: list, anchors for YOLO
-    		num_classes: int, number of classes in the dataset
-    		ignore_threshold: float, threshold for considering a predicted box as True Positive
-    	Output:
-    		loss: computed loss
+def compute_loss(output, y_true, anchors, num_classes, input_shape, ignore_threshold=0.5, print_loss=False):
+    """ Computes the custom written loss for provided output.
+        Input:
+            output: array, output of model for provided input image
+            y_true: array, y_true label corresponding to the output produced from GT
+            anchors: list, anchors for model
+            num_classes: int, number of classes in the dataset
+            ignore_threshold: float, threshold for considering a predicted box as True Positive
+            print_loss: python boolean, flag for printing loss of the model
+        Output:
+            loss: computed loss
     """
-    num_anchors = len(anchors)
-    anchor_mask = [[6, 7, 8], [3, 4, 5], [0, 1, 2]] if num_anchors==9 else [[3, 4, 5], [0, 1, 2]]
+    num_anchors = len(anchors) / config.num_anchors_per_scale
+    anchor_mask = [[6, 7, 8], [3, 4, 5], [0, 1, 2]] if num_anchors==3 else [[3, 4, 5], [0, 1, 2]]
 
     loss_scale = []
-    input_shape = [config.input_shape, config.input_shape]
+    input_shape = [input_shape, input_shape]
     loss, loss_xy, loss_wh, loss_object, loss_no_object, loss_conf, loss_class = 0, 0, 0, 0, 0, 0, 0
-    m = tf.shape(output[0])[0] # getting the batch_size
+    m = tf.shape(output[0])[0] # getting the batch_size for carrying out MSE
     mf = tf.cast(m, dtype=output[0].dtype)
 
     for l in range(len(output)):
         object_mask = y_true[l][..., 4:5]
         grid_shape = tf.shape(output[l])[1:3] # output is of shape: [batch_size, grid_x, grid_y, num_anchors_per_scale*(5+num_classes)]
 
-        xy_offset, raw_pred, pred_xy, pred_wh = yolo_head(output[l], anchors[anchor_mask[l]], 
+        xy_offset, raw_pred, pred_xy, pred_wh = get_head(output[l], anchors[anchor_mask[l]], 
             num_classes, input_shape, calc_loss=True)
         pred_box = tf.concat([pred_xy, pred_wh], axis=-1)
 
@@ -40,7 +41,7 @@ def compute_loss(output, y_true, anchors, num_classes, ignore_threshold=0.5, obj
         ignore_mask = tf.cast(best_iou < ignore_threshold, dtype=tf.float32)
         ignore_mask = tf.expand_dims(ignore_mask, axis=-1)
 
-
+        # Just another way of calculating ignore_mask
         # ignore_mask = tf.TensorArray(y_true[0].dtype, size=1, dynamic_size=True)
         # object_mask_bool = tf.cast(object_mask, dtype=tf.bool)
 
@@ -57,17 +58,14 @@ def compute_loss(output, y_true, anchors, num_classes, ignore_threshold=0.5, obj
 
         # ignore_mask = ignore_mask.stack()
         # ignore_mask = tf.expand_dims(ignore_mask, axis=-1)
-        
 
+        # Confining the range of values between 0 and 1 as we will be working with offsets w.r.t. grids
         true_xy = y_true[l][..., 0:2] / (tf.cast(input_shape[::-1] / tf.cast(grid_shape[::-1], dtype=output[l].dtype),
             dtype=output[l].dtype)) - xy_offset
         pred_xy = pred_xy / (tf.cast(input_shape[::-1] / tf.cast(grid_shape[::-1], dtype=output[l].dtype),
             dtype=output[l].dtype)) - xy_offset
 
-        # print_op = tf.Print(true_xy, [tf.shape(true_xy)], message="xy_offset: ")
-        # true_xy = tf.Print(true_xy, [tf.reduce_min(true_xy), tf.reduce_max(true_xy)], message="true_xy: ")
-        # pred_xy = tf.Print(pred_xy, [tf.reduce_min(pred_xy), tf.reduce_max(pred_xy)], message="pred_xy: ")
-
+        # Getting the scaling of acnhors
         true_wh = y_true[l][..., 2:4] / anchors[anchor_mask[l]]
         pred_wh = pred_wh / anchors[anchor_mask[l]]
 
@@ -77,64 +75,60 @@ def compute_loss(output, y_true, anchors, num_classes, ignore_threshold=0.5, obj
         pred_wh = tf.where(condition=tf.equal(pred_wh, 0.),
                               x=tf.ones_like(pred_wh), y=pred_wh)
 
+        # Taking square root so that width and height errors of small and large boxes are penalised similiarly
         true_wh = tf.sqrt(true_wh)
         pred_wh = tf.sqrt(pred_wh)
 
         true_wh = tf.log(tf.clip_by_value(true_wh, 1e-4, 1e4))
         pred_wh = tf.log(tf.clip_by_value(pred_wh, 1e-4, 1e4))
 
-        # true_wh = true_wh * object_mask
-        # true_wh = tf.Print(true_wh, [tf.reduce_min(true_wh), tf.reduce_max(true_wh)], message="true_wh: ")
-        # pred_wh = object_mask * pred_wh
-        # pred_wh = tf.Print(pred_wh, [tf.reduce_min(pred_wh), tf.reduce_max(pred_wh)], message="pred_wh: ")
-
-
         pred_conf = raw_pred[..., 4:5]
         true_class_probs = y_true[l][..., 5:]
         pred_class_probs = raw_pred[..., 5:]
 
-
-        """ Computing some statistics """
-        # ignore_score_threshold = 0.5
-        # detect_mask = tf.to_float(tf.nn.sigmoid(pred_conf) * object_mask >= ignore_score_threshold)
-        # class_mask = tf.to_float(tf.equal(tf.argmax(tf.nn.sigmoid(pred_class_probs)), tf.argmax(true_class_probs)))
-        # avg_iou = tf.reduce_sum(iou) / (tf.reduce_sum(object_mask) + 1e-6)
-        # recall_50 = tf.reduce_sum(tf.to_float(iou >= 0.50) * detect_mask * class_mask) / (tf.reduce_sum(object_mask) + 1e-6)
-        # recall_75 = tf.reduce_sum(tf.to_float(iou >= 0.75) * detect_mask * class_mask) / (tf.reduce_sum(object_mask) + 1e-6)
-
-        # iou_avg += avg_iou
-        # recall_50_avg += recall_50
-        # recall_75_avg += recall_75
-
-        # pred_conf = tf.Print(pred_conf, [tf.reduce_min(pred_conf), tf.reduce_max(pred_conf)], message="pred_conf: ")
-        # pred_class_probs = tf.Print(pred_class_probs, [tf.reduce_min(pred_class_probs), tf.reduce_max(pred_class_probs)], message="pred_class_probs: ")
-
-        # box with smaller area has bigger weight. This is taken from the yolo darknet C source code.
+        # box with smaller area has bigger weight
         # shape: [N, 13, 13, 3, 1]
-        box_loss_scale = 2. - (y_true[l][..., 2:3] / input_shape[1]) * (y_true[l][..., 3:4] / tf.cast(input_shape[0], tf.float32))
-        
-        #### HUBER LOSS ####
-        # delta_xy = 2.0
-        # delta_wh = 2.0
-        
-        # err_xy = tf.subtract(true_xy, pred_xy)
-        # xy_loss = object_mask * box_loss_scale * tf.where(condition=tf.less(tf.abs(err_xy), delta_xy), 
-        #     x=0.5 * tf.square(err_xy), y=0.5 * tf.square(delta_xy) + delta_xy * tf.subtract(tf.abs(err_xy), delta_xy))
+        # print_op_gt = tf.Print(y_true[l], [tf.shape(y_true[l])], message="gt_shape: ")
+        # print_op_pred = tf.Print(raw_pred, [tf.shape(raw_pred)], message="pred_shape: ")
+        # with tf.control_dependencies([print_op_gt, print_op_pred]):
+        box_loss_scale = 2. - (y_true[l][..., 2:3] / tf.cast(input_shape[0], tf.float32)) * (y_true[l][..., 3:4] / tf.cast(input_shape[0], tf.float32))
 
-        # err_wh = tf.subtract(true_wh, pred_wh)
-        # wh_loss = object_mask * box_loss_scale * tf.where(condition=tf.less(tf.abs(err_wh), delta_wh), 
-        #     x=0.5 * tf.square(err_wh), y=0.5 * tf.square(delta_wh) + delta_wh * tf.subtract(tf.abs(err_wh), delta_wh))
-
+        # with tf.name_scope('xy_loss/'):
         xy_loss = object_mask * box_loss_scale * tf.square(true_xy - pred_xy)
 
+        # with tf.name_scope('wh_loss/'):
         wh_loss = object_mask * box_loss_scale * tf.square(true_wh - pred_wh)
 
-        object_loss = object_mask * tf.nn.sigmoid_cross_entropy_with_logits(labels=object_mask, logits=pred_conf)
-        no_object_loss = (1 - object_mask) * tf.nn.sigmoid_cross_entropy_with_logits(labels=object_mask, logits=pred_conf) * ignore_mask
+        # with tf.name_scope('confidence_loss/'):
+        def calc_scale(alpha, targets, preds, gamma):
+            """ Computes dynamic scaling for confidence 
+                Input:
+                    alpha: float, fraction of calculated scaling to be used
+                    targets: tf tensor, gt labels for the batch
+                    preds: tf tensor, predicted labels for the batch
+                    gamma: int, power to be used for scaling
+                Output:
+                    Returns scaling for the required batch
+            """
+            return alpha * tf.pow(tf.abs(targets - tf.nn.sigmoid(preds)), gamma)
+
+        confidence_scale = calc_scale(alpha=0.5, targets=object_mask, preds=pred_conf, gamma=2) # Calculate dynamic scaling for the model
+        # confidence_scale = 1.0
+        object_loss = confidence_scale * (object_mask * tf.nn.sigmoid_cross_entropy_with_logits(labels=object_mask, logits=pred_conf))
+        no_object_loss = confidence_scale * ((1.0 - object_mask) * ignore_mask * tf.nn.sigmoid_cross_entropy_with_logits(labels=object_mask, logits=pred_conf))
         confidence_loss = object_loss + no_object_loss
 
-        class_loss = object_mask * tf.nn.sigmoid_cross_entropy_with_logits(labels=true_class_probs, logits=pred_class_probs)
+        # confidence_loss = confidence_scale * tf.nn.sigmoid_cross_entropy_with_logits(labels=object_mask, logits=pred_conf)
+        
+        # with tf.name_scope('class_loss/'):
+        class_scale = calc_scale(alpha=0.5, targets=true_class_probs, preds=pred_class_probs, gamma=2)
+        # class_scale = 1.0
+        class_loss = class_scale * object_mask * tf.nn.sigmoid_cross_entropy_with_logits(labels=true_class_probs, logits=pred_class_probs)
 
+        # class_loss = object_mask * tf.nn.softmax_cross_entropy_with_logits_v2(labels=true_class_probs, logits=pred_class_probs)
+        # class_loss = class_scale * object_mask * tf.nn.softmax_cross_entropy_with_logits_v2(labels=true_class_probs, logits=pred_class_probs)
+
+        # Taking mean of all the losses over the batch size
         xy_loss = tf.reduce_sum(xy_loss) / mf
         wh_loss = tf.reduce_sum(wh_loss) / mf
         object_loss = tf.reduce_sum(object_loss) / mf
@@ -142,17 +136,18 @@ def compute_loss(output, y_true, anchors, num_classes, ignore_threshold=0.5, obj
         confidence_loss = tf.reduce_sum(confidence_loss) / mf
         class_loss = tf.reduce_sum(class_loss) / mf
 
+        # Adding losses for all the 3 scales
         loss_xy += xy_loss
         loss_wh += wh_loss
         loss_object += object_loss
         loss_no_object += no_object_loss
         loss_conf += confidence_loss
         loss_class += class_loss
-        loss += xy_loss + wh_loss + confidence_loss + class_loss
+        loss += (xy_loss + wh_loss + confidence_loss + class_loss)
         loss_scale.append(xy_loss + wh_loss + confidence_loss + class_loss)
 
         if print_loss:
-            loss = tf.Print(loss, [loss, xy_loss, wh_loss, confidence_loss, class_loss, 
+            loss = tf.Print(loss, [loss, xy_loss, wh_loss, confidence_loss, class_loss,
                 tf.reduce_sum(ignore_mask)], message='loss: ')
 
     return loss_scale, loss, loss_xy, loss_wh, loss_object, loss_no_object, loss_conf, loss_class
@@ -160,11 +155,11 @@ def compute_loss(output, y_true, anchors, num_classes, ignore_threshold=0.5, obj
 
 def compute_iou(box1, box2):
     """ Computes IoU between two boxes.
-    	Input:
-    		box1: list, parameters for box1
-    		box2: list, parameters for box 2
-    	Output:
-    		iou: float, iou between box1 and box2
+        Input:
+            box1: list, parameters for box1
+            box2: list, parameters for box 2
+        Output:
+            iou: float, iou between box1 and box2
     """
     box1 = tf.expand_dims(box1, -2)
     box1_xy = box1[..., 0:2]
@@ -186,3 +181,4 @@ def compute_iou(box1, box2):
     box2_area = box2_wh[..., 0] * box2_wh[..., 1]
     iou = intersect_area / (box1_area + box2_area - intersect_area)
     return iou
+ 
