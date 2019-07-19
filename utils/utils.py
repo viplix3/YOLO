@@ -130,7 +130,7 @@ def correct_boxes(box_xy, box_wh, input_shape, image_shape):
 	return boxes
 
 
-def yolo_boxes_and_scores(output, anchors, num_classes, input_shape, image_shape):
+def get_boxes_and_scores(output, anchors, num_classes, input_shape, image_shape):
 	""" Computes the output of YOLO and returns boxes and their corresponding scores
 		Input:
 			output: tensorflow tensor, output nodes of the YOLO mode
