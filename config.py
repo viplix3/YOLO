@@ -1,5 +1,5 @@
 num_parallel_calls = 10
-input_shape = 320 # input shape of the model
+input_shape = 608 # input shape of the model
 max_boxes = 51 # max number of boxes to be kept of a class during non max suppression
 # for data augmentation
 jitter = 0.3 

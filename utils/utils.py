@@ -143,11 +143,20 @@ def yolo_boxes_and_scores(output, anchors, num_classes, input_shape, image_shape
 			box_scores: array, scores corresponding box in boxes
 	"""
 	
-	boxes_xy, boxes_wh, box_conf, box_clas_prob = yolo_head(output, anchors, num_classes,
+	boxes_xy, boxes_wh, box_conf, box_clas_prob = get_head(output, anchors, num_classes,
 		input_shape)
-	boxes = yolo_correct_boxes(boxes_xy, boxes_wh, input_shape, image_shape)
+	boxes = correct_boxes(boxes_xy, boxes_wh, input_shape, image_shape)
 	boxes = tf.reshape(boxes, [-1, 4])
-	box_scores = tf.multiply(box_conf, box_clas_prob)
+
+	best_class_scores = tf.reduce_max(box_clas_prob, axis=-1, keepdims=True)
+	class_mask = tf.cast(box_clas_prob >= best_class_scores, dtype=tf.float32)
+
+	class_scores = tf.multiply(box_clas_prob, class_mask)
+	box_scores = tf.multiply(box_conf, class_scores)
+
+	# print_op = tf.Print(class_mask, [tf.shape(class_mask)], message="alalalalala: ")
+
+	# with tf.control_dependencies([print_op]):
 	box_scores = tf.reshape(box_scores, [-1, num_classes])
 	return boxes, box_scores
 
