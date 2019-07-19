@@ -40,7 +40,7 @@ def resize_image(image_data, size):
 	return new_image
 
 
-def yolo_head(output, anchors, num_classes, input_shape, calc_loss=False):
+def get_head(output, anchors, num_classes, input_shape, calc_loss=False):
 	""" Converts the output tensor of YOLO to bounding boxes parameters 
 		Input:
 			output: list, list of tenors containing the output of YOLO at different scales
@@ -98,7 +98,7 @@ def yolo_head(output, anchors, num_classes, input_shape, calc_loss=False):
 
 
 
-def yolo_correct_boxes(box_xy, box_wh, input_shape, image_shape):
+def correct_boxes(box_xy, box_wh, input_shape, image_shape):
 	""" Rescales the boxes according to the image_shape from the input_shape
 		Input:
 			box_xy, array, xy coordinates of box_mid

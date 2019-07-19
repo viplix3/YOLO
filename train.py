@@ -215,10 +215,10 @@ def train(ckpt_path, log_path, class_path):
 		val_summary_writer = tf.summary.FileWriter(os.path.join(log_path, 'val'), sess.graph)
 		
 		# Restoring the model
-		ckpt = tf.train.get_checkpoint_state(ckpt_path+'train/')
+		ckpt = tf.train.get_checkpoint_state(ckpt_path+'valid/')
 		if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
-			print('Restoring model ', checkmate.get_best_checkpoint(ckpt_path+'train/'))
-			tf.train.Saver().restore(sess, checkmate.get_best_checkpoint(ckpt_path+'train/'))
+			print('Restoring model ', checkmate.get_best_checkpoint(ckpt_path+'valid/'))
+			tf.train.Saver().restore(sess, checkmate.get_best_checkpoint(ckpt_path+'valid/'))
 			print('Model Loaded!')
 		elif config.pre_train is True:
 			sess.run(init_op)
