@@ -1,5 +1,5 @@
 num_parallel_calls = 4 # number of parallel cpu threads to be used for fetching the data during training
-input_shape = 416 # input shape of the model
+input_shape = 608 # input shape of the model
 max_boxes = 20 # max number of boxes to be kept of a class during non max suppression
 # for data augmentation
 jitter = 0.3 
@@ -35,7 +35,7 @@ model_dir = './converted/' # path for saving the model
 yolov3_cfg_path = './darknet_data/yolov3.cfg' # cfg file for the model
 yolov3_weights_path = './darknet_data/yolov3.weights' # path of weights file for the model if the pre-trained model is to be used for training
 darknet53_weights_path = './darknet_data/darknet53.weights' # path of weights file for the darknet feature extractor
-anchors_path = './/yolo_anchors.txt' # path to the anchors file
+anchors_path = './anchors.txt' # path to the anchors file
 classes_path = './model_data/raccoon_classes.txt' # path for the text file containing the classes of the dataset
 train_annotations_file = './train.txt' # path for the text file containing the training image annotations
 val_annotations_file = './val.txt' # path for text file containing the validation image annotations
