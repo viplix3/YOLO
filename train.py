@@ -180,7 +180,12 @@ def train(ckpt_path, log_path, class_path):
 			# optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate, momentum=config.momentum)
 			update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 			with tf.control_dependencies(update_ops):
-				grads = optimizer.compute_gradients(loss=loss)
+				if config.pre_train:
+					train_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='yolo')
+				else:
+					train_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+
+				grads = optimizer.compute_gradients(loss=loss, var_list=train_vars)
 				gradients = [(tf.placeholder(dtype=tf.float32, shape=grad[1].get_shape()), grad[1]) for grad in grads]
 				optimizing_op = optimizer.apply_gradients(grads_and_vars=gradients, global_step=global_step)
 				# optimizing_op = optimizer.minimize(loss=loss, global_step=global_step)
@@ -236,39 +241,40 @@ def train(ckpt_path, log_path, class_path):
 
 			trainbar = tqdm(range(config.train_num//config.train_batch_size))
 			for k in trainbar:
-				all_grads_and_vars, total_grads = [], []
+				all_grads_and_vars = []
 				for minibatch in range(config.train_batch_size // config.subdivisions):
 					num_steps, train_summary, loss_train, grads_and_vars = sess.run([global_step, summary_op, loss,
 						grads], feed_dict={is_training: True, mode: 1})
 
-					all_grads_and_vars.append(grads_and_vars)
+					all_grads_and_vars += grads_and_vars
 
 					train_summary_writer.add_summary(train_summary, epoch)
 					train_summary_writer.flush()
 					mean_loss_train.append(loss_train)
 					trainbar.set_description('Train loss: %s' %str(loss_train))
 
+
 				feed_dict = {is_training: True, mode: 1}
+				for i in range(len(gradients), len(all_grads_and_vars)):
+					all_grads_and_vars[i % len(gradients)] += all_grads_and_vars[i][0]
+				all_grads_and_vars = all_grads_and_vars[:len(gradients)]
 				for i in range(len(gradients)):
-					feed_dict[gradients[i][0]] = total_grad[i][0]
+					feed_dict[gradients[i][0]] = all_grads_and_vars[i][0]
 				# print(np.shape(feed_dict))
 
-				_ = sess.run(train_step, feed_dict=feed_dict)
-				train_summary_writer.add_summary(train_summary, epoch)
-				train_summary_writer.flush()
-				mean_loss_train.append(loss_train)
-				trainbar.set_description('Train loss: %s' %str(loss_train))
+				_ = sess.run(train_op, feed_dict=feed_dict)
 
 
 
 			print('Validating.....')
 			valbar = tqdm(range(config.val_num//config.val_batch_size))
 			for k in valbar:
-				val_summary, loss_valid = sess.run([summary_op_valid, loss], feed_dict={is_training: False, mode: 0})
-				val_summary_writer.add_summary(val_summary, epoch)
-				val_summary_writer.flush()
-				mean_loss_valid.append(loss_valid)
-				valbar.set_description('Validation loss: %s' %str(loss_valid))
+				for minibatch in range(config.train_batch_size // config.subdivisions):
+					val_summary, loss_valid = sess.run([summary_op_valid, loss], feed_dict={is_training: False, mode: 0})
+					val_summary_writer.add_summary(val_summary, epoch)
+					val_summary_writer.flush()
+					mean_loss_valid.append(loss_valid)
+					valbar.set_description('Validation loss: %s' %str(loss_valid))
 
 			mean_loss_train = np.mean(mean_loss_train)
 			mean_loss_valid = np.mean(mean_loss_valid)

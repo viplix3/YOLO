@@ -11,3 +11,5 @@ results/
 raccoon_annotations.py
 gt_verification/
 tfrecords/
+train.txt
+val.txt
