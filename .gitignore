@@ -8,3 +8,6 @@ logs/
 env/
 test_images/
 results/
+raccoon_annotations.py
+gt_verification/
+tfrecords/

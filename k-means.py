@@ -1,5 +1,6 @@
 """ A program which performs k-means clustering to get the the dimentions of anchor boxes """
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 import cv2
 import os
@@ -7,6 +8,7 @@ import sys
 import config
 from utils.utils import resize_image
 
+matplotlib.use('agg')
 file_path = config.train_annotations_file
 
 

@@ -76,7 +76,7 @@ def train(ckpt_path, log_path, class_path):
 
 			val_reader = Parser('val', config.anchors_path, config.output_dir, 
 				config.num_classes, input_shape=config.input_shape, max_boxes=config.max_boxes)
-			val_data = val_reader.build_dataset(config.val_batch_size)
+			val_data = val_reader.build_dataset(config.val_batch_size//config.subdivisions)
 			val_iterator = val_data.make_one_shot_iterator()
 
 
@@ -124,21 +124,20 @@ def train(ckpt_path, log_path, class_path):
 
 		# Compute Loss
 		with tf.name_scope('Loss_and_Detect'):
-			loss_scale, yolo_loss, xy_loss, wh_loss, obj_loss, noobj_loss, conf_loss, class_loss = compute_loss(output, y_true, anchors, config.num_classes, ignore_threshold=config.ignore_thresh)
-			l2_loss = tf.losses.get_regularization_loss()
-			loss = yolo_loss + l2_loss
+			loss_scale, yolo_loss, xy_loss, wh_loss, obj_loss, noobj_loss, conf_loss, class_loss = compute_loss(output, y_true, anchors, config.num_classes, config.input_shape, 
+				ignore_threshold=config.ignore_thresh)
+			loss = yolo_loss 
 			exponential_moving_average_op = tf.train.ExponentialMovingAverage(config.weight_decay).apply(var_list=tf.trainable_variables()) # For regularisation
-			scale1_loss_summary = tf.summary.scalar('scale_loss_1', loss_scale[0])
-			scale2_loss_summary = tf.summary.scalar('scale_loss_2', loss_scale[1])
-			yolo_loss_summary = tf.summary.scalar('yolo_loss', yolo_loss)
-			l2_loss_summary = tf.summary.scalar('l2_loss', l2_loss)
-			total_loss_summary = tf.summary.scalar('Total_loss', loss)
-			xy_loss_summary = tf.summary.scalar('xy_loss', xy_loss)
-			wh_loss_summary = tf.summary.scalar('wh_loss', wh_loss)
-			obj_loss_summary = tf.summary.scalar('obj_loss', obj_loss)
-			noobj_loss_summary = tf.summary.scalar('noobj_loss', noobj_loss)
-			conf_loss_summary = tf.summary.scalar('confidence_loss', conf_loss)
-			class_loss_summary = tf.summary.scalar('class_loss', class_loss)
+			scale1_loss_summary = tf.summary.scalar('scale_loss_1', loss_scale[0], family='Loss')
+			scale2_loss_summary = tf.summary.scalar('scale_loss_2', loss_scale[1], family='Loss')
+			yolo_loss_summary = tf.summary.scalar('yolo_loss', yolo_loss, family='Loss')
+			# total_loss_summary = tf.summary.scalar('Total_loss', loss, family='Loss')
+			xy_loss_summary = tf.summary.scalar('xy_loss', xy_loss, family='Loss')
+			wh_loss_summary = tf.summary.scalar('wh_loss', wh_loss, family='Loss')
+			obj_loss_summary = tf.summary.scalar('obj_loss', obj_loss, family='Loss')
+			noobj_loss_summary = tf.summary.scalar('noobj_loss', noobj_loss, family='Loss')
+			conf_loss_summary = tf.summary.scalar('confidence_loss', conf_loss, family='Loss')
+			class_loss_summary = tf.summary.scalar('class_loss', class_loss, family='Loss')
 
 
 		# Declaring the parameters for training the model
@@ -176,15 +175,15 @@ def train(ckpt_path, log_path, class_path):
 
 		# Define optimizer for minimizing the computed loss
 		with tf.name_scope('Optimizer'):
-			optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=config.momentum)
-			# optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+			# optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=config.momentum)
+			optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
 			# optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate, momentum=config.momentum)
 			update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 			with tf.control_dependencies(update_ops):
-				# grads = optimizer.compute_gradients(loss=loss)
-				# gradients = [(tf.placeholder(dtype=tf.float32, shape=grad[1].get_shape()), grad[1]) for grad in grads]
-				# train_step = optimizer.apply_gradients(grads_and_vars=gradients, global_step=global_step)
-				optimizing_op = optimizer.minimize(loss=loss, global_step=global_step)
+				grads = optimizer.compute_gradients(loss=loss)
+				gradients = [(tf.placeholder(dtype=tf.float32, shape=grad[1].get_shape()), grad[1]) for grad in grads]
+				optimizing_op = optimizer.apply_gradients(grads_and_vars=gradients, global_step=global_step)
+				# optimizing_op = optimizer.minimize(loss=loss, global_step=global_step)
 			
 			with tf.control_dependencies([optimizing_op]):
 				with tf.control_dependencies([exponential_moving_average_op]):
@@ -198,10 +197,9 @@ def train(ckpt_path, log_path, class_path):
 		best_ckpt_saver_train = checkmate.BestCheckpointSaver(save_dir=ckpt_path+'train/', num_to_keep=5)
 		best_ckpt_saver_valid = checkmate.BestCheckpointSaver(save_dir=ckpt_path+'valid/', num_to_keep=5)
 		summary_op = tf.summary.merge_all()
-		summary_op_valid = tf.summary.merge([yolo_loss_summary, l2_loss_summary, total_loss_summary, xy_loss_summary, wh_loss_summary, 
+		summary_op_valid = tf.summary.merge([yolo_loss_summary, xy_loss_summary, wh_loss_summary, 
 			obj_loss_summary, noobj_loss_summary, conf_loss_summary, class_loss_summary, scale1_loss_summary, scale2_loss_summary])
-		# summary_op_valid = tf.summary.merge([image_summary, yolo_loss_summary, l2_loss_summary, total_loss_summary, xy_loss_summary, wh_loss_summary, 
-		# 	obj_loss_summary, noobj_loss_summary, conf_loss_summary, class_loss_summary, scale1_loss_summary, scale2_loss_summary])
+
 		init_op = tf.global_variables_initializer()
 
 
@@ -238,14 +236,29 @@ def train(ckpt_path, log_path, class_path):
 
 			trainbar = tqdm(range(config.train_num//config.train_batch_size))
 			for k in trainbar:
+				all_grads_and_vars, total_grads = [], []
+				for minibatch in range(config.train_batch_size // config.subdivisions):
+					num_steps, train_summary, loss_train, grads_and_vars = sess.run([global_step, summary_op, loss,
+						grads], feed_dict={is_training: True, mode: 1})
 
-				num_steps, train_summary, loss_train, _ = sess.run([global_step, summary_op, loss,
-					train_op], feed_dict={is_training: True, mode: 1})
+					all_grads_and_vars.append(grads_and_vars)
 
+					train_summary_writer.add_summary(train_summary, epoch)
+					train_summary_writer.flush()
+					mean_loss_train.append(loss_train)
+					trainbar.set_description('Train loss: %s' %str(loss_train))
+
+				feed_dict = {is_training: True, mode: 1}
+				for i in range(len(gradients)):
+					feed_dict[gradients[i][0]] = total_grad[i][0]
+				# print(np.shape(feed_dict))
+
+				_ = sess.run(train_step, feed_dict=feed_dict)
 				train_summary_writer.add_summary(train_summary, epoch)
 				train_summary_writer.flush()
 				mean_loss_train.append(loss_train)
 				trainbar.set_description('Train loss: %s' %str(loss_train))
+
 
 
 			print('Validating.....')
