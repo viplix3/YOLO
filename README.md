@@ -15,9 +15,9 @@
 - [x] Subdivisions implentation - aids in training big batches with small GPU vRAM
 - [x] Multiple learning rate scheduler with burn-in
 - [x] Protobuf file generation and inference
-- [ ] Multi-resolution training
-- [ ] Multi resolution inference
-- [ ] Multi-GPU training
+- ~~[ ] Multi-resolution training~~
+- ~~[ ] Multi resolution inference~~
+- ~~[ ] Multi-GPU training~~
 - [x] Fine-tuning on any dataset
 - [x] [Focal Loss](https://arxiv.org/abs/1708.02002) Note - A special case of focal loss has been implemented where alpha=0.5 and gamma=2.
 - [ ] [GIoU](https://giou.stanford.edu/) training 
