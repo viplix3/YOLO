@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 def resize_image(image_data, size):
 	""" Resizes the image without changing the aspect ratio with padding, so that
-		the image size is divisible by 32, as per YOLO requirement.
+		the image size is as per model requirement.
 		Input:
 			image_data: array, original image data
 			size: tuple, size the image is to e resized into
@@ -41,9 +41,9 @@ def resize_image(image_data, size):
 
 
 def get_head(output, anchors, num_classes, input_shape, calc_loss=False):
-	""" Converts the output tensor of YOLO to bounding boxes parameters 
+	""" Converts the output tensor of model to bounding boxes parameters 
 		Input:
-			output: list, list of tenors containing the output of YOLO at different scales
+			output: list, list of tenors containing the output of model at different scales
 			anchors: array, containing the anchors for the model
 			num_classes: int, number of classes form which prediction are to be made
 			input_shape: shape of the input fed to the network
@@ -87,7 +87,6 @@ def get_head(output, anchors, num_classes, input_shape, calc_loss=False):
 		box_class_probs = tf.nn.sigmoid(output[..., 5:]) # [None, 13, 13, 3, num_classes]
 
 		# Adjust pedictions to each spatial grid point and anchor size
-		# NOTE: YOLO iterates over height before the width
 		box_xy = (box_xy + xy_offset) * tf.cast(input_shape[::-1] // tf.cast(grid_shape[::-1], dtype=output.dtype), # absolute values [mid_x, mid_y] of predicted box
 			dtype=output.dtype) # [None, 13, 13, 3, 2]
 		box_wh = box_wh * anchors_tensor # absolute values [width, height] of predicted box
@@ -121,25 +120,25 @@ def correct_boxes(box_xy, box_wh, input_shape, image_shape):
 
 	# [y_min, x_min, y_max, x_max] as we will be using tf.image.non_max_suppression
 	boxes = tf.concat([
-		(box_mins[..., 1:2] - offset[0]/2.) * (image_shape[0] / (input_shape[0] - offset[0])),  # y_min
-		(box_mins[..., 0:1] - offset[1]/2.) * (image_shape[1] / (input_shape[1] - offset[1])), # x_min
-		(box_maxes[..., 1:2] - offset[0]/2.) * (image_shape[0] / (input_shape[0] - offset[0])), # y_max
-		(box_maxes[..., 0:1] - offset[1]/2.) * (image_shape[1] / (input_shape[1]  - offset[1])), # x_max
+		(box_mins[..., 1:2] - offset[0]/2.) / scale,  # y_min
+		(box_mins[..., 0:1] - offset[1]/2.) / scale, # x_min
+		(box_maxes[..., 1:2] - offset[0]/2.) / scale, # y_max
+		(box_maxes[..., 0:1] - offset[1]/2.) / scale, # x_max
 		], axis=-1)
 
 	return boxes
 
 
 def get_boxes_and_scores(output, anchors, num_classes, input_shape, image_shape):
-	""" Computes the output of YOLO and returns boxes and their corresponding scores
+	""" Computes the output of model and returns boxes and their corresponding scores
 		Input:
-			output: tensorflow tensor, output nodes of the YOLO mode
-			anchors: array, anchors used by the YOLO for given output node
+			output: tensorflow tensor, output nodes of the model mode
+			anchors: array, anchors used by the model for given output node
 			num_classes: int, number of classes for making predictions
-			input_shape: tuple, shape of the input of the YOLO model
-			image_shape: tuple, shape of the image fed to the YOLO for prediction
+			input_shape: tuple, shape of the input of the model model
+			image_shape: tuple, shape of the image fed to the model for prediction
 		Output:
-			boxes: array, filtered boxes predicted by the YOLO
+			boxes: array, filtered boxes predicted by the model
 			box_scores: array, scores corresponding box in boxes
 	"""
 	
@@ -160,8 +159,9 @@ def get_boxes_and_scores(output, anchors, num_classes, input_shape, image_shape)
 	box_scores = tf.reshape(box_scores, [-1, num_classes])
 	return boxes, box_scores
 
+	# return boxes, box_conf, box_clas_prob
 
-def draw_box(image, bbox):
+def draw_box(image, bbox, filename):
 	""" Draws boxes over the images provided for tensorboard.
 		Input:
 			image: tfrecord file holding the image information
